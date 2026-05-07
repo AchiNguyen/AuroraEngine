@@ -1,0 +1,42 @@
+# Build output
+build/
+out/
+vcpkg_installed/
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+CMakeSettings.json.user
+CMakeUserPresets.json
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+Testing/
+
+# Compiled artifacts
+*.o
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.so
+*.dylib
+*.a
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

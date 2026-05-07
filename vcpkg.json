@@ -1,0 +1,15 @@
+{
+    "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+    "name": "auroraengine",
+    "version-string": "0.1.0",
+    "description": "Aurora real-time rendering engine",
+    "dependencies": [
+        "glfw3",
+        {
+            "name": "glad",
+            "features": ["gl-api-46"]
+        },
+        "glm",
+        "spdlog"
+    ]
+}
