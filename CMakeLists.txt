@@ -50,6 +50,8 @@ add_executable(AuroraEngine
     src/scene.cpp
     src/scene_renderer.cpp
     src/plane.cpp
+    src/cubemap.cpp
+    src/skybox.cpp
 )
 
 target_include_directories(AuroraEngine

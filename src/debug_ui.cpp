@@ -191,6 +191,9 @@ void DebugUI::render_panels(SceneState& state) {
     if (ImGui::Begin("Scene")) {
         ImGui::ColorEdit3("Clear color",    &state.clear_color.x);
         ImGui::ColorEdit3("Ambient factor", &scene.ambient_factor.x);
+        ImGui::Separator();
+        ImGui::Checkbox   ("Skybox enabled",    &scene.skybox_enabled);
+        ImGui::SliderFloat("Skybox brightness", &scene.skybox_brightness, 0.0f, 2.0f);
     }
     ImGui::End();
 }

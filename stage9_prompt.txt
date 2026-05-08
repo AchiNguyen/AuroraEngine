@@ -1,0 +1,117 @@
+Stage 9: Skybox via cubemap texture. Render a sci-fi sky environment as the scene background. Build on Stage 8.
+
+CONSTRAINTS:
+- Don't modify Camera, Scene, lighting, models, ImGui panels.
+- Update window title to "Aurora — Stage 9".
+- Skybox is rendered LAST each frame (after all opaque scene geometry and lamp visualization, BEFORE ImGui).
+
+NEW FILES:
+
+1. include/aurora/cubemap.hpp + src/cubemap.cpp — Cubemap texture class:
+   - Constructor takes std::array<std::string, 6> face_paths in this order:
+       0: +X (right)
+       1: -X (left)
+       2: +Y (top)
+       3: -Y (bottom)
+       4: +Z (front)
+       5: -Z (back)
+     This matches OpenGL's GL_TEXTURE_CUBE_MAP_POSITIVE_X..._NEGATIVE_Z layout.
+   - For each face: stbi_load (NO vertical flip for cubemaps - that's a 2D texture convention; cubemaps use as-is), glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, ...).
+   - Texture parameters:
+       glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+       glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+       glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+       glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+       glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+   - Log success or failure per-face via spdlog.
+   - bind(unsigned int unit) — glActiveTexture + glBindTexture(GL_TEXTURE_CUBE_MAP, id).
+   - id() and unit() accessors.
+   - RAII destructor; movable, not copyable.
+
+2. include/aurora/skybox.hpp + src/skybox.cpp — Skybox class:
+   - Constructor takes std::shared_ptr<Cubemap>.
+   - Owns: VAO, VBO for a 1x1x1 unit cube (positions only, 36 vertices, no indices for simplicity).
+   - Owns its own Shader (built from shaders/skybox.vert + shaders/skybox.frag — see below).
+   - draw(const glm::mat4& view, const glm::mat4& projection):
+       glDepthFunc(GL_LEQUAL);          // allow depth = 1.0 to pass
+       shader.bind();
+       glm::mat4 view_no_translate = glm::mat4(glm::mat3(view));   // strip translation
+       shader.set_uniform("u_view", view_no_translate);
+       shader.set_uniform("u_projection", projection);
+       cubemap->bind(0);
+       shader.set_uniform("u_skybox", 0);
+       glBindVertexArray(vao);
+       glDrawArrays(GL_TRIANGLES, 0, 36);
+       glDepthFunc(GL_LESS);            // restore
+   - RAII destructor.
+
+NEW SHADERS:
+
+shaders/skybox.vert:
+   #version 460 core
+   layout(location = 0) in vec3 a_position;
+   out vec3 v_local_dir;
+
+   uniform mat4 u_view;
+   uniform mat4 u_projection;
+
+   void main() {
+       v_local_dir = a_position;
+       vec4 pos = u_projection * u_view * vec4(a_position, 1.0);
+       gl_Position = pos.xyww;   // force z = w => depth = 1.0 in NDC (max depth)
+   }
+
+shaders/skybox.frag:
+   #version 460 core
+   in vec3 v_local_dir;
+   out vec4 frag_color;
+
+   uniform samplerCube u_skybox;
+
+   void main() {
+       frag_color = texture(u_skybox, v_local_dir);
+   }
+
+ASSETS:
+
+- Place 6 sky face images in assets/skybox/sci_fi/:
+      right.jpg, left.jpg, top.jpg, bottom.jpg, front.jpg, back.jpg
+- The standard learnopengl "skybox" set is well-known and free for educational use:
+      https://learnopengl.com/img/textures/skybox.zip
+- Provide PowerShell commands for me to download manually if CMake fetch is awkward. The file list above is the exact set inside that zip. Note that the zip's filenames may vary slightly — common alternatives: posx/negx/posy/negy/posz/negz, or right/left/top/bottom/front/back. Map them appropriately.
+
+INTEGRATION INTO MAIN.CPP:
+
+After all scene rendering (models + lamps), before ImGui:
+   skybox.draw(camera.view_matrix(), camera.projection_matrix(window_aspect));
+   debug_ui.end_frame();
+   glfwSwapBuffers(...);
+
+INTEGRATION INTO SCENE_RENDERER (alternative cleaner path):
+
+If SceneRenderer's draw() is the right place, add:
+   void SceneRenderer::set_skybox(std::shared_ptr<Skybox> sb);
+   - Stored optionally; if set, drawn at the end of draw().
+- Pick whichever fits the existing class design cleanly.
+
+DEBUG UI:
+
+- Add to "Scene" panel:
+   - Checkbox "Skybox enabled" (default on; if off, fallback to clear color).
+   - SliderFloat "Skybox brightness" (0–2, multiplied into the sampled color in the fragment shader).
+- The brightness multiplier requires adding a `uniform float u_brightness` to skybox.frag and multiplying:
+      frag_color = texture(u_skybox, v_local_dir) * u_brightness;
+
+CMAKE:
+
+- Add new sources: src/cubemap.cpp, src/skybox.cpp.
+- Copy assets/skybox/ to runtime output dir alongside other assets.
+
+DELIVERABLES:
+
+- New files: cubemap.hpp/cpp, skybox.hpp/cpp, shaders/skybox.vert, shaders/skybox.frag.
+- New asset directory: assets/skybox/sci_fi/ with 6 face images.
+- Updated: main.cpp (instantiate Skybox, call draw at end of frame), scene panel (add toggle + brightness slider), CMakeLists.txt.
+- spdlog logs the load of all 6 faces with sizes, and a single line "Skybox initialized."
+
+End with the build steps. Expected result: the dark blue void is replaced by a sci-fi galaxy/space environment that wraps around the camera. As you fly around with WASD + mouse, the environment stays in place (camera moves in the world, sky doesn't rotate with the camera position — only with rotation). The backpacks remain on the floor with the new sky behind them.

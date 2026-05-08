@@ -5,6 +5,7 @@
 #include "aurora/material.hpp"
 #include "aurora/model.hpp"
 #include "aurora/scene.hpp"
+#include "aurora/skybox.hpp"
 #include "aurora/transform.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -75,6 +76,14 @@ void SceneRenderer::draw(const Scene& scene, const Camera& camera, glm::ivec2 vi
         lamp.set_uniform("u_color", node.light.color * node.light.intensity);
         lamp_mesh_.draw();
     }
+
+    if (skybox_ && scene.skybox_enabled) {
+        skybox_->draw(view, projection, scene.skybox_brightness);
+    }
+}
+
+void SceneRenderer::set_skybox(std::shared_ptr<Skybox> skybox) {
+    skybox_ = std::move(skybox);
 }
 
 }

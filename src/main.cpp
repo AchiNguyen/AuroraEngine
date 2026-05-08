@@ -1,5 +1,6 @@
 #include "aurora/camera.hpp"
 #include "aurora/cube.hpp"
+#include "aurora/cubemap.hpp"
 #include "aurora/debug_ui.hpp"
 #include "aurora/light.hpp"
 #include "aurora/model.hpp"
@@ -8,6 +9,7 @@
 #include "aurora/scene_renderer.hpp"
 #include "aurora/scene_state.hpp"
 #include "aurora/shader.hpp"
+#include "aurora/skybox.hpp"
 #include "aurora/transform.hpp"
 #include "aurora/window.hpp"
 
@@ -16,9 +18,12 @@
 #include <glm/glm.hpp>
 #include <spdlog/spdlog.h>
 
+#include <array>
 #include <cstdlib>
 #include <exception>
 #include <memory>
+#include <string>
+#include <utility>
 
 int main() {
 #ifdef AURORA_DEBUG
@@ -32,7 +37,7 @@ int main() {
         aurora::GlfwContext glfw;
 
         aurora::WindowSpec spec;
-        spec.title = "Aurora \xE2\x80\x94 Stage 8";
+        spec.title = "Aurora \xE2\x80\x94 Stage 9";
         aurora::Window window(spec);
 
         glEnable(GL_DEPTH_TEST);
@@ -111,6 +116,18 @@ int main() {
             std::make_shared<aurora::Shader>("shaders/lamp.vert", "shaders/lamp.frag"),
             aurora::make_cube()
         );
+
+        {
+            auto cubemap = std::make_shared<aurora::Cubemap>(std::array<std::string, 6>{
+                "assets/skybox/sci_fi/right.jpg",
+                "assets/skybox/sci_fi/left.jpg",
+                "assets/skybox/sci_fi/top.jpg",
+                "assets/skybox/sci_fi/bottom.jpg",
+                "assets/skybox/sci_fi/front.jpg",
+                "assets/skybox/sci_fi/back.jpg",
+            });
+            renderer.set_skybox(std::make_shared<aurora::Skybox>(std::move(cubemap)));
+        }
 
         glm::vec3 clear_color{0x0a / 255.0f, 0x0e / 255.0f, 0x27 / 255.0f};
         aurora::SceneState scene_state{ scene, camera, clear_color };

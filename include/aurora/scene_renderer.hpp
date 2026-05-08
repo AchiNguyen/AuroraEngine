@@ -11,6 +11,7 @@ namespace aurora {
 
 class Camera;
 class Scene;
+class Skybox;
 
 class SceneRenderer {
 public:
@@ -27,10 +28,14 @@ public:
 
     void draw(const Scene& scene, const Camera& camera, glm::ivec2 viewport_size);
 
+    void                    set_skybox(std::shared_ptr<Skybox> skybox);
+    std::shared_ptr<Skybox> skybox() const { return skybox_; }
+
 private:
     std::shared_ptr<Shader> mesh_shader_;
     std::shared_ptr<Shader> lamp_shader_;
     Mesh                    lamp_mesh_;
+    std::shared_ptr<Skybox> skybox_;
 };
 
 }

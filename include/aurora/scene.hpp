@@ -43,6 +43,9 @@ public:
     bool      dir_light_enabled = true;
     glm::vec3 ambient_factor{0.1f};
 
+    bool  skybox_enabled    = true;
+    float skybox_brightness = 1.0f;
+
     ModelNode&      add_model(std::string name, std::shared_ptr<Model> model, Transform transform = {});
     PointLightNode& add_point_light(std::string name, PointLight light, Transform transform = {});
 
