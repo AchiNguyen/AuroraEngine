@@ -121,6 +121,17 @@ std::shared_ptr<Texture> Texture::black_fallback() {
     return p;
 }
 
+std::shared_ptr<Texture> Texture::flat_normal_fallback() {
+    static std::weak_ptr<Texture> cached;
+    if (auto p = cached.lock()) return p;
+    // (0.5, 0.5, 1.0) encodes a tangent-space normal pointing straight out (+Z).
+    constexpr unsigned char kFlat[4] = {128, 128, 255, 255};
+    auto p = std::shared_ptr<Texture>(new Texture(1, 1, kFlat, TextureType::Normal));
+    cached = p;
+    spdlog::debug("Texture: created 1x1 flat-normal fallback id={}", p->id());
+    return p;
+}
+
 std::shared_ptr<Texture> Texture::make_solid_color(glm::vec3 color) {
     auto to_byte = [](float v) -> unsigned char {
         if (v <= 0.0f) return 0;

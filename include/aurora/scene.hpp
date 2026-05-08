@@ -40,8 +40,8 @@ public:
         glm::vec3( 1.0f,  0.95f, 0.85f),
         0.5f,
     };
-    bool      dir_light_enabled = true;
-    glm::vec3 ambient_factor{0.1f};
+    bool  dir_light_enabled = true;
+    float ambient_factor    = 0.1f;
 
     bool  skybox_enabled    = true;
     float skybox_brightness = 1.0f;

@@ -16,6 +16,15 @@ constexpr glm::vec3 kColorNegY{1.0f, 0.0f, 1.0f};
 constexpr glm::vec3 kColorPosZ{0.0f, 0.0f, 1.0f};
 constexpr glm::vec3 kColorNegZ{1.0f, 1.0f, 0.0f};
 
+// Per-face tangents (along U, perpendicular to face normal). The cube isn't
+// rendered with a normal map, but the Vertex layout requires a tangent.
+constexpr glm::vec3 kTanPosZ{ 1.0f,  0.0f,  0.0f};
+constexpr glm::vec3 kTanNegZ{-1.0f,  0.0f,  0.0f};
+constexpr glm::vec3 kTanPosX{ 0.0f,  0.0f, -1.0f};
+constexpr glm::vec3 kTanNegX{ 0.0f,  0.0f,  1.0f};
+constexpr glm::vec3 kTanPosY{ 1.0f,  0.0f,  0.0f};
+constexpr glm::vec3 kTanNegY{ 1.0f,  0.0f,  0.0f};
+
 // Each face's 4 corners get the unit square (0,0)(1,0)(1,1)(0,1) so the full
 // image is mapped per face.
 constexpr glm::vec2 kUv00{0.0f, 0.0f};
@@ -25,40 +34,40 @@ constexpr glm::vec2 kUv01{0.0f, 1.0f};
 
 constexpr std::array<Vertex, 24> kVertices{{
     // +Z front face (normal +Z)
-    {{-0.5f, -0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}, kUv00},
-    {{ 0.5f, -0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}, kUv10},
-    {{ 0.5f,  0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}, kUv11},
-    {{-0.5f,  0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}, kUv01},
+    {{-0.5f, -0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}, kTanPosZ, kUv00},
+    {{ 0.5f, -0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}, kTanPosZ, kUv10},
+    {{ 0.5f,  0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}, kTanPosZ, kUv11},
+    {{-0.5f,  0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}, kTanPosZ, kUv01},
 
     // -Z back face (normal -Z)
-    {{ 0.5f, -0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}, kUv00},
-    {{-0.5f, -0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}, kUv10},
-    {{-0.5f,  0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}, kUv11},
-    {{ 0.5f,  0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}, kUv01},
+    {{ 0.5f, -0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}, kTanNegZ, kUv00},
+    {{-0.5f, -0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}, kTanNegZ, kUv10},
+    {{-0.5f,  0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}, kTanNegZ, kUv11},
+    {{ 0.5f,  0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}, kTanNegZ, kUv01},
 
     // +X right face (normal +X)
-    {{ 0.5f, -0.5f,  0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}, kUv00},
-    {{ 0.5f, -0.5f, -0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}, kUv10},
-    {{ 0.5f,  0.5f, -0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}, kUv11},
-    {{ 0.5f,  0.5f,  0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}, kUv01},
+    {{ 0.5f, -0.5f,  0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}, kTanPosX, kUv00},
+    {{ 0.5f, -0.5f, -0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}, kTanPosX, kUv10},
+    {{ 0.5f,  0.5f, -0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}, kTanPosX, kUv11},
+    {{ 0.5f,  0.5f,  0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}, kTanPosX, kUv01},
 
     // -X left face (normal -X)
-    {{-0.5f, -0.5f, -0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}, kUv00},
-    {{-0.5f, -0.5f,  0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}, kUv10},
-    {{-0.5f,  0.5f,  0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}, kUv11},
-    {{-0.5f,  0.5f, -0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}, kUv01},
+    {{-0.5f, -0.5f, -0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}, kTanNegX, kUv00},
+    {{-0.5f, -0.5f,  0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}, kTanNegX, kUv10},
+    {{-0.5f,  0.5f,  0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}, kTanNegX, kUv11},
+    {{-0.5f,  0.5f, -0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}, kTanNegX, kUv01},
 
     // +Y top face (normal +Y)
-    {{-0.5f,  0.5f,  0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}, kUv00},
-    {{ 0.5f,  0.5f,  0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}, kUv10},
-    {{ 0.5f,  0.5f, -0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}, kUv11},
-    {{-0.5f,  0.5f, -0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}, kUv01},
+    {{-0.5f,  0.5f,  0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}, kTanPosY, kUv00},
+    {{ 0.5f,  0.5f,  0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}, kTanPosY, kUv10},
+    {{ 0.5f,  0.5f, -0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}, kTanPosY, kUv11},
+    {{-0.5f,  0.5f, -0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}, kTanPosY, kUv01},
 
     // -Y bottom face (normal -Y)
-    {{-0.5f, -0.5f, -0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}, kUv00},
-    {{ 0.5f, -0.5f, -0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}, kUv10},
-    {{ 0.5f, -0.5f,  0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}, kUv11},
-    {{-0.5f, -0.5f,  0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}, kUv01},
+    {{-0.5f, -0.5f, -0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}, kTanNegY, kUv00},
+    {{ 0.5f, -0.5f, -0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}, kTanNegY, kUv10},
+    {{ 0.5f, -0.5f,  0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}, kTanNegY, kUv11},
+    {{-0.5f, -0.5f,  0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}, kTanNegY, kUv01},
 }};
 
 constexpr std::array<std::uint32_t, 36> kIndices{{

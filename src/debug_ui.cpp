@@ -181,6 +181,10 @@ void DebugUI::render_panels(SceneState& state) {
                                        1.0f, 256.0f,
                                        "%.1f",
                                        ImGuiSliderFlags_Logarithmic);
+                    ImGui::Text("Normal map: %s", mat.normal_map ? "yes" : "no");
+                    ImGui::SliderFloat("Normal map intensity",
+                                       &mat.normal_map_intensity,
+                                       0.0f, 2.0f);
                 }
             }
             ImGui::PopID();
@@ -189,8 +193,8 @@ void DebugUI::render_panels(SceneState& state) {
     ImGui::End();
 
     if (ImGui::Begin("Scene")) {
-        ImGui::ColorEdit3("Clear color",    &state.clear_color.x);
-        ImGui::ColorEdit3("Ambient factor", &scene.ambient_factor.x);
+        ImGui::ColorEdit3 ("Clear color",    &state.clear_color.x);
+        ImGui::SliderFloat("Ambient factor", &scene.ambient_factor, 0.0f, 1.0f);
         ImGui::Separator();
         ImGui::Checkbox   ("Skybox enabled",    &scene.skybox_enabled);
         ImGui::SliderFloat("Skybox brightness", &scene.skybox_brightness, 0.0f, 2.0f);

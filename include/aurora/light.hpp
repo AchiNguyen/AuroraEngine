@@ -11,7 +11,8 @@ class Shader;
 struct DirectionalLight {
     glm::vec3 direction;
     glm::vec3 color;
-    float intensity;
+    float     intensity;
+    bool      enabled = true;
 };
 
 struct PointLight {

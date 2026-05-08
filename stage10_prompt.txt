@@ -1,0 +1,159 @@
+Stage 10: Tangent-space normal mapping. Add per-pixel surface detail by sampling normal maps in the fragment shader. Build on Stage 9.
+
+CONSTRAINTS:
+- Update window title to "Aurora — Stage 10".
+- Don't break the existing scene; the floor (which has no normal map) should still render correctly with a fallback flat normal.
+- Tangents are already being computed by Assimp (aiProcess_CalcTangentSpace from Stage 6); we need to read them and use them.
+
+UPDATED VERTEX FORMAT:
+
+- Vertex struct gains a tangent: vec3 position, color, normal, tangent, uv.
+- Bitangent does NOT need to be stored — derive in vertex shader as cross(normal, tangent).
+  (Storing tangent only is the standard memory-saving approach. The sign of the bitangent can usually be assumed +1; if visible mirroring artifacts appear later, add a 4th tangent component for handedness.)
+- Update vertex attribute layout: location 0=position, 1=color, 2=normal, 3=tangent, 4=uv.
+  Note this changes attribute 3 from uv to tangent and adds uv at 4. Update both Mesh::Mesh attribute setup AND every shader's `layout(location=...)` declarations consistently.
+- Update model.cpp's vertex copy loop:
+   v.tangent = aiVec3 from mesh->mTangents[i] (with null check; if mTangents is null, write vec3(1,0,0) as a sentinel and log a warning).
+
+UPDATED MATERIAL:
+
+- struct Material gains:
+       std::shared_ptr<Texture> normal_map;          // optional
+- Texture creation: TextureType::Normal already exists in the enum.
+- upload(Shader&, name, Material) now also:
+       material.normal_map ? bind(2) : bind a 1x1 (0.5, 0.5, 1.0) flat-normal fallback;
+       shader.set_uniform(name + ".normal", 2);
+       shader.set_uniform(name + ".has_normal_map", material.normal_map ? 1 : 0);
+- Auto-discovery in model loading (model.cpp's processMesh): also try to load aiTextureType_NORMALS or aiTextureType_HEIGHT (some .obj files use the latter for normals); pass the loaded texture to Material.normal_map.
+- Backpack model has assets/models/backpack/normal.png — verify it gets picked up.
+
+UPDATED SHADERS:
+
+shaders/mesh.vert — pass tangent basis to fragment shader:
+   #version 460 core
+   layout(location=0) in vec3 a_position;
+   layout(location=1) in vec3 a_color;
+   layout(location=2) in vec3 a_normal;
+   layout(location=3) in vec3 a_tangent;
+   layout(location=4) in vec2 a_uv;
+
+   out vec3 v_world_position;
+   out vec3 v_world_normal;
+   out vec3 v_world_tangent;
+   out vec3 v_world_bitangent;
+   out vec2 v_uv;
+
+   uniform mat4 u_model;
+   uniform mat4 u_view;
+   uniform mat4 u_projection;
+
+   void main() {
+       vec4 world_pos = u_model * vec4(a_position, 1.0);
+       v_world_position = world_pos.xyz;
+       mat3 normal_matrix = mat3(transpose(inverse(u_model)));
+       v_world_normal    = normalize(normal_matrix * a_normal);
+       v_world_tangent   = normalize(normal_matrix * a_tangent);
+       // Re-orthogonalize tangent against normal (Gram-Schmidt) and compute bitangent
+       v_world_tangent   = normalize(v_world_tangent - dot(v_world_tangent, v_world_normal) * v_world_normal);
+       v_world_bitangent = cross(v_world_normal, v_world_tangent);
+       v_uv = a_uv;
+       gl_Position = u_projection * u_view * world_pos;
+   }
+
+shaders/mesh.frag — sample normal map and use it for lighting:
+   #version 460 core
+   #define MAX_POINT_LIGHTS 8
+
+   in vec3 v_world_position;
+   in vec3 v_world_normal;
+   in vec3 v_world_tangent;
+   in vec3 v_world_bitangent;
+   in vec2 v_uv;
+   out vec4 frag_color;
+
+   struct Material {
+       sampler2D diffuse;
+       sampler2D specular;
+       sampler2D normal;
+       float shininess;
+       int has_normal_map;
+   };
+   struct DirectionalLight {
+       vec3 direction;
+       vec3 color;
+       float intensity;
+       int enabled;
+   };
+   struct PointLight {
+       vec3 position;
+       vec3 color;
+       float intensity;
+       float constant;
+       float linear;
+       float quadratic;
+   };
+
+   uniform Material u_material;
+   uniform DirectionalLight u_dir_light;
+   uniform PointLight u_point_lights[MAX_POINT_LIGHTS];
+   uniform int u_num_point_lights;
+   uniform vec3 u_view_position;
+   uniform float u_ambient_factor;
+
+   vec3 compute_normal() {
+       if (u_material.has_normal_map == 0) {
+           return normalize(v_world_normal);
+       }
+       // Sample normal map: stored as RGB in [0,1], decode to [-1,1].
+       vec3 tangent_normal = texture(u_material.normal, v_uv).rgb * 2.0 - 1.0;
+       mat3 TBN = mat3(normalize(v_world_tangent),
+                       normalize(v_world_bitangent),
+                       normalize(v_world_normal));
+       return normalize(TBN * tangent_normal);
+   }
+
+   vec3 phong_directional(DirectionalLight light, vec3 normal, vec3 view_dir,
+                          vec3 albedo, vec3 specular_color);  // unchanged from Stage 8
+   vec3 phong_point(PointLight light, vec3 normal, vec3 frag_pos, vec3 view_dir,
+                    vec3 albedo, vec3 specular_color);        // unchanged from Stage 8
+
+   void main() {
+       vec3 albedo = texture(u_material.diffuse,  v_uv).rgb;
+       vec3 spec_c = texture(u_material.specular, v_uv).rgb;
+       vec3 normal = compute_normal();    // <-- KEY CHANGE
+       vec3 view_dir = normalize(u_view_position - v_world_position);
+
+       vec3 result = albedo * u_ambient_factor;
+       if (u_dir_light.enabled != 0) {
+           result += phong_directional(u_dir_light, normal, view_dir, albedo, spec_c);
+       }
+       for (int i = 0; i < u_num_point_lights; ++i) {
+           result += phong_point(u_point_lights[i], normal, v_world_position, view_dir, albedo, spec_c);
+       }
+
+       frag_color = vec4(result, 1.0);
+   }
+
+TEXTURE LOADING NOTE:
+
+- IMPORTANT: normal maps must NOT be uploaded as sRGB (gamma-corrected). They contain raw direction data, not perceptual color.
+- If your Texture class uses GL_SRGB8_ALPHA8 or GL_SRGB8 internal format for diffuse maps (it might not yet — check), normal maps need GL_RGBA8 / GL_RGB8 instead.
+- Add a `bool srgb` parameter to the Texture constructor (default true for diffuse, false for normal/specular). Or better: derive from TextureType — Diffuse is sRGB, Normal/Specular are linear.
+
+DEBUG UI:
+
+- Add to "Material" panel:
+   - Read-only display "Normal map: yes/no" per material.
+   - SliderFloat "Normal map intensity" (0–2, default 1) — multiplied into the (R, G) components of the sampled normal before TBN transform. Lets you exaggerate or reduce the bumpiness for visual debugging. Add `uniform float u_normal_intensity` to mesh.frag.
+
+CMAKE:
+
+- No new sources beyond shader/material modifications.
+- The backpack model's normal.png should already be in assets/models/backpack/. Verify it's there (ls assets/models/backpack/) and ask me to download if missing.
+
+DELIVERABLES:
+
+- Updated: mesh.hpp (Vertex struct), mesh.cpp (attribute layout), model.cpp (tangent copy + normal map auto-discovery), texture.hpp/cpp (sRGB vs linear flag), material.hpp/cpp (normal_map field, fallback, upload), mesh.vert (tangent in, TBN out), mesh.frag (compute_normal + intensity), debug_ui (intensity slider).
+- Possibly updated: skybox.vert (only if it shares the same Vertex struct — it shouldn't, skybox uses positions only).
+
+End with the build steps. Expected result: backpacks now show clear surface detail. Leather has bumps and grain, seams recess, metal axe heads have scratches and tooling marks. Floor is unaffected (no normal map, falls back to flat shading). Drag the orbiting blue light around the backpack and watch the highlights now respond to the SURFACE DETAIL, not just the rough geometry.

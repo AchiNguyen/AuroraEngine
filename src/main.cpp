@@ -37,7 +37,7 @@ int main() {
         aurora::GlfwContext glfw;
 
         aurora::WindowSpec spec;
-        spec.title = "Aurora \xE2\x80\x94 Stage 9";
+        spec.title = "Aurora \xE2\x80\x94 Stage 10";
         aurora::Window window(spec);
 
         glEnable(GL_DEPTH_TEST);
@@ -57,7 +57,7 @@ int main() {
             glm::vec3( 1.0f,  0.95f, 0.85f),
             0.5f,
         };
-        scene.ambient_factor = glm::vec3(0.1f);
+        scene.ambient_factor = 0.1f;
 
         {
             aurora::Transform t;
@@ -134,7 +134,7 @@ int main() {
 
         aurora::DebugUI debug_ui(window.handle());
 
-        spdlog::info("Aurora started \xE2\x80\x94 entering Stage 8 render loop");
+        spdlog::info("Aurora started \xE2\x80\x94 entering Stage 10 render loop");
         spdlog::info("Controls: WASD move, Space/LCtrl up-down, mouse look, TAB release cursor, ESC quit");
 
         double last_time     = glfwGetTime();

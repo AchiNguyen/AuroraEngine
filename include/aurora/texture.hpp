@@ -29,6 +29,7 @@ public:
     // shared across all materials that need them.
     static std::shared_ptr<Texture> white_fallback();
     static std::shared_ptr<Texture> black_fallback();
+    static std::shared_ptr<Texture> flat_normal_fallback();
 
     // 1x1 RGBA texture with the given linear color (each channel clamped to [0,1]).
     static std::shared_ptr<Texture> make_solid_color(glm::vec3 color);

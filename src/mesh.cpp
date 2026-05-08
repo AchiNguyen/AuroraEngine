@@ -40,7 +40,11 @@ Mesh::Mesh(std::span<const Vertex> vertices, std::span<const std::uint32_t> indi
                           reinterpret_cast<const void*>(offsetof(Vertex, normal)));
 
     glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                          reinterpret_cast<const void*>(offsetof(Vertex, tangent)));
+
+    glEnableVertexAttribArray(4);
+    glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                           reinterpret_cast<const void*>(offsetof(Vertex, uv)));
 
     glBindVertexArray(0);

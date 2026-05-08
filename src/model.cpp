@@ -48,12 +48,20 @@ void process_mesh(const aiMesh* ai_mesh, const aiScene* scene,
     vertices.clear();
     vertices.reserve(ai_mesh->mNumVertices);
 
-    const bool has_uv = ai_mesh->HasTextureCoords(0);
+    const bool has_uv       = ai_mesh->HasTextureCoords(0);
+    const bool has_tangents = ai_mesh->mTangents != nullptr;
+    if (!has_tangents) {
+        spdlog::warn("Mesh '{}' has no tangents; using sentinel (1,0,0). "
+                     "Normal mapping will be incorrect for this mesh.",
+                     ai_mesh->mName.C_Str());
+    }
     for (unsigned int i = 0; i < ai_mesh->mNumVertices; ++i) {
         Vertex v{};
         v.position = to_glm(ai_mesh->mVertices[i]);
         v.normal   = ai_mesh->HasNormals() ? to_glm(ai_mesh->mNormals[i])
                                            : glm::vec3(0.0f, 1.0f, 0.0f);
+        v.tangent  = has_tangents ? to_glm(ai_mesh->mTangents[i])
+                                  : glm::vec3(1.0f, 0.0f, 0.0f);
         v.color    = glm::vec3(1.0f);
         v.uv       = has_uv ? glm::vec2(ai_mesh->mTextureCoords[0][i].x,
                                         ai_mesh->mTextureCoords[0][i].y)
@@ -75,6 +83,12 @@ void process_mesh(const aiMesh* ai_mesh, const aiScene* scene,
         const aiMaterial* mat = scene->mMaterials[ai_mesh->mMaterialIndex];
         material.diffuse_map  = load_first_texture(mat, aiTextureType_DIFFUSE,  TextureType::Diffuse,  dir);
         material.specular_map = load_first_texture(mat, aiTextureType_SPECULAR, TextureType::Specular, dir);
+        material.normal_map   = load_first_texture(mat, aiTextureType_NORMALS,  TextureType::Normal,   dir);
+        if (!material.normal_map) {
+            // Many .obj files declare normal maps with `map_Bump` which assimp
+            // exposes as aiTextureType_HEIGHT.
+            material.normal_map = load_first_texture(mat, aiTextureType_HEIGHT, TextureType::Normal, dir);
+        }
         float shininess = 0.0f;
         if (mat->Get(AI_MATKEY_SHININESS, shininess) == AI_SUCCESS && shininess > 0.0f) {
             material.shininess = shininess;
@@ -132,6 +146,7 @@ Model::Model(const std::filesystem::path& path)
     for (const auto& e : entries_) {
         if (e.material.diffuse_map)  distinct.insert(e.material.diffuse_map.get());
         if (e.material.specular_map) distinct.insert(e.material.specular_map.get());
+        if (e.material.normal_map)   distinct.insert(e.material.normal_map.get());
     }
 
     spdlog::info("Model '{}' loaded: meshes={} vertices={} triangles={} textures={}",

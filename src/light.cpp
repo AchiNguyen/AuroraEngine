@@ -8,6 +8,7 @@ void upload(Shader& shader, const std::string& name, const DirectionalLight& lig
     shader.set_uniform(name + ".direction", light.direction);
     shader.set_uniform(name + ".color",     light.color);
     shader.set_uniform(name + ".intensity", light.intensity);
+    shader.set_uniform(name + ".enabled",   light.enabled ? 1 : 0);
 }
 
 void upload(Shader& shader, const std::string& name, const PointLight& light) {

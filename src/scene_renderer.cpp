@@ -38,9 +38,7 @@ void SceneRenderer::draw(const Scene& scene, const Camera& camera, glm::ivec2 vi
     shader.set_uniform("u_ambient_factor", scene.ambient_factor);
 
     DirectionalLight effective_dir = scene.dir_light;
-    if (!scene.dir_light_enabled) {
-        effective_dir.intensity = 0.0f;
-    }
+    effective_dir.enabled = scene.dir_light_enabled && effective_dir.enabled;
     upload(shader, "u_dir_light", effective_dir);
 
     int active_lights = 0;
@@ -56,10 +54,7 @@ void SceneRenderer::draw(const Scene& scene, const Camera& camera, glm::ivec2 vi
 
     for (const auto& node : scene.models) {
         if (!node.visible || !node.model) continue;
-        const glm::mat4 model_mat    = node.transform.matrix();
-        const glm::mat3 normal_mat   = node.transform.normal_matrix();
-        shader.set_uniform("u_model",         model_mat);
-        shader.set_uniform("u_normal_matrix", normal_mat);
+        shader.set_uniform("u_model", node.transform.matrix());
         node.model->draw(shader);
     }
 
