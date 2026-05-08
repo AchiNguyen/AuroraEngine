@@ -1,0 +1,183 @@
+Stage 11: Real-time shadow mapping for the directional light only. Build on Stage 10. Point lights do NOT cast shadows in this stage (deferred to Stage 12).
+
+CONSTRAINTS:
+- Update window title to "Aurora — Stage 11".
+- Keep all Stage 1-10 functionality. The shadow pass is additive.
+- Use a single directional light shadow map. Resolution configurable, default 2048x2048.
+- Apply standard fixes for shadow acne (depth bias) and peter panning (front-face culling during shadow pass).
+- Use percentage-closer filtering (PCF) with a 3x3 kernel for soft edges.
+
+NEW FILES:
+
+1. include/aurora/framebuffer.hpp + src/framebuffer.cpp — generic FBO wrapper:
+   - Constructor for a depth-only framebuffer used for shadow maps:
+       Framebuffer::Framebuffer(int width, int height, FramebufferKind::DepthOnly tag);
+       (Or a static factory: Framebuffer::depth_only(int w, int h).)
+   - Internally:
+       glGenFramebuffers, glBindFramebuffer.
+       glGenTextures depth texture: GL_DEPTH_COMPONENT32F internal format, GL_LINEAR for filtering, GL_CLAMP_TO_BORDER for wrap (with border color = 1.0 in all 4 channels — out-of-frustum samples are "fully lit").
+       Attach depth texture to GL_DEPTH_ATTACHMENT.
+       glDrawBuffer(GL_NONE); glReadBuffer(GL_NONE); — no color attachment.
+       Verify glCheckFramebufferStatus.
+   - bind() / unbind() — for use in render passes.
+   - depth_texture_id() / size() accessors.
+   - RAII destructor: glDeleteFramebuffers, glDeleteTextures.
+
+2. include/aurora/shadow_pass.hpp + src/shadow_pass.cpp — directional-light shadow renderer:
+   - Owns a Framebuffer (depth-only, configurable size).
+   - Owns a Shader built from shaders/shadow_depth.vert + shaders/shadow_depth.frag.
+   - Has a method:
+       glm::mat4 light_space_matrix(const DirectionalLight& sun, glm::vec3 scene_center, float scene_radius);
+     This computes the orthographic projection + view that bounds the scene from the sun's perspective.
+     - View: glm::lookAt(scene_center - sun.direction * scene_radius * 2.0, scene_center, world_up).
+     - Projection: glm::ortho(-scene_radius, scene_radius, -scene_radius, scene_radius, 0.1, 4.0 * scene_radius).
+     - Returns projection * view.
+   - render(const Scene& scene, glm::mat4 light_space_matrix):
+       Bind framebuffer.
+       glViewport(0, 0, fbo.size().x, fbo.size().y).
+       glClear(GL_DEPTH_BUFFER_BIT).
+       glCullFace(GL_FRONT);  // peter-panning fix: render back faces only
+       Bind shadow_depth shader, set uniform u_light_space.
+       For each visible model node: set u_model = transform.matrix(); model.draw(shadow_shader_unused_for_textures).
+         (Actually: model.draw needs to be flexible. The shadow shader doesn't sample any textures; it just needs position. Two options:
+            a) Add a `bool depth_only` parameter to Model::draw / Mesh::draw that skips material upload.
+            b) The shadow shader simply ignores any uniforms it doesn't have. The vertex attributes must match (same Vertex struct, but shadow vert only uses position).
+         Pick whichever is cleaner.)
+       glCullFace(GL_BACK);  // restore.
+       Unbind framebuffer.
+   - depth_texture_id() — pass to main pass.
+
+NEW SHADERS:
+
+shaders/shadow_depth.vert — minimal, position-only:
+   #version 460 core
+   layout(location=0) in vec3 a_position;
+
+   uniform mat4 u_light_space;
+   uniform mat4 u_model;
+
+   void main() {
+       gl_Position = u_light_space * u_model * vec4(a_position, 1.0);
+   }
+
+shaders/shadow_depth.frag — empty, depth is auto-written:
+   #version 460 core
+   void main() {
+       // Depth is written automatically; no color output needed.
+   }
+
+UPDATED MAIN MESH SHADERS:
+
+shaders/mesh.vert — add light-space output:
+   ... (existing inputs) ...
+   out vec4 v_light_space_position;
+
+   uniform mat4 u_light_space;
+
+   void main() {
+       ... (existing logic) ...
+       v_light_space_position = u_light_space * world_pos;
+       gl_Position = u_projection * u_view * world_pos;
+   }
+
+shaders/mesh.frag — sample shadow map and compute occlusion:
+   ... (existing struct + uniforms) ...
+
+   in vec4 v_light_space_position;
+
+   uniform sampler2D u_shadow_map;
+   uniform int u_shadows_enabled;
+   uniform float u_shadow_bias_min;   // default 0.0005
+   uniform float u_shadow_bias_max;   // default 0.005
+
+   float compute_shadow(vec3 normal, vec3 light_dir) {
+       if (u_shadows_enabled == 0) return 0.0;
+       // Perspective divide (no-op for ortho but standard practice):
+       vec3 proj = v_light_space_position.xyz / v_light_space_position.w;
+       proj = proj * 0.5 + 0.5;  // [-1,1] -> [0,1]
+       if (proj.z > 1.0) return 0.0;  // outside light's far plane = unshadowed
+
+       // Bias scaled by surface angle to light (steep angles need more bias)
+       float bias = max(u_shadow_bias_max * (1.0 - dot(normal, light_dir)), u_shadow_bias_min);
+
+       // PCF 3x3
+       float shadow = 0.0;
+       vec2 texel_size = 1.0 / textureSize(u_shadow_map, 0);
+       for (int x = -1; x <= 1; ++x) {
+           for (int y = -1; y <= 1; ++y) {
+               float pcf_depth = texture(u_shadow_map, proj.xy + vec2(x, y) * texel_size).r;
+               shadow += proj.z - bias > pcf_depth ? 1.0 : 0.0;
+           }
+       }
+       return shadow / 9.0;
+   }
+
+   // Modify phong_directional to take shadow factor:
+   vec3 phong_directional(DirectionalLight light, vec3 normal, vec3 view_dir,
+                          vec3 albedo, vec3 specular_color, float shadow) {
+       vec3 light_dir = normalize(-light.direction);
+       float diff = max(dot(normal, light_dir), 0.0);
+       vec3 reflect_dir = reflect(-light_dir, normal);
+       float spec = pow(max(dot(view_dir, reflect_dir), 0.0), u_material.shininess);
+       vec3 ambient = light.color * albedo * 0.1;
+       vec3 diffuse = light.color * diff * albedo * (1.0 - shadow);
+       vec3 specular = light.color * spec * specular_color * (1.0 - shadow);
+       return (ambient + diffuse + specular) * light.intensity;
+   }
+
+   // In main():
+   //   vec3 light_dir_world = normalize(-u_dir_light.direction);
+   //   float shadow = compute_shadow(normal, light_dir_world);
+   //   ... pass shadow to phong_directional() ...
+
+INTEGRATION INTO SCENE_RENDERER (or main.cpp):
+
+Per frame, in this order:
+  1. shadow_pass.render(scene, light_space_matrix);
+  2. Bind default framebuffer (glBindFramebuffer(GL_FRAMEBUFFER, 0)).
+  3. glViewport(0, 0, window_w, window_h);  // restore window viewport
+  4. Clear color + depth buffers.
+  5. Render scene as before, with these additions:
+       - Bind shadow_pass.depth_texture_id() to texture unit 3 (after diffuse/specular/normal at 0/1/2).
+       - shader.set_uniform("u_shadow_map", 3);
+       - shader.set_uniform("u_light_space", light_space_matrix);
+       - shader.set_uniform("u_shadows_enabled", scene.shadows_enabled ? 1 : 0);
+       - shader.set_uniform("u_shadow_bias_min", scene.shadow_bias_min);
+       - shader.set_uniform("u_shadow_bias_max", scene.shadow_bias_max);
+  6. Render skybox last as usual.
+
+SCENE STATE / DEBUG UI:
+
+Scene struct gains:
+   bool shadows_enabled = true;
+   int shadow_map_size = 2048;     // applied at construction; not changeable at runtime
+   float shadow_bias_min = 0.0005;
+   float shadow_bias_max = 0.005;
+   float scene_radius = 15.0f;     // bounds for the orthographic shadow frustum
+   glm::vec3 scene_center = vec3(0); // center of the shadow frustum
+
+New "Shadows" panel in DebugUI:
+   - Checkbox "Enabled".
+   - SliderFloat "Bias min" (0 to 0.01).
+   - SliderFloat "Bias max" (0 to 0.05).
+   - SliderFloat "Scene radius" (5 to 50).
+   - SliderFloat3 "Scene center" (-20 to 20 each).
+   - Read-only display of shadow map size.
+   - Tiny preview window showing the shadow depth texture (use ImGui::Image with the depth_texture_id; flip Y by using uv0=(0,1), uv1=(1,0)).
+     Note: depth textures sampled as ImGui::Image will look near-white because near-plane depths are ~1.0. That's expected. Useful for seeing which models are within the shadow frustum.
+
+CMAKE:
+- Add new sources: src/framebuffer.cpp, src/shadow_pass.cpp.
+- No new vcpkg deps.
+
+DELIVERABLES:
+- New: framebuffer.hpp/cpp, shadow_pass.hpp/cpp, shadow_depth.vert/frag.
+- Updated: mesh.vert (light-space output), mesh.frag (shadow sampling + modified phong_directional), Scene struct, DebugUI (Shadows panel), main.cpp or scene_renderer (two-pass render order), CMakeLists.txt.
+
+End with the build steps. Expected result: the directional sun now casts real shadows from the three backpacks onto the floor. The shadows have soft edges (PCF). When you drag the sun direction in ImGui, the shadows rotate. When you uncheck "Shadows enabled", they disappear. The point lights still illuminate but don't cast shadows (lamp visualizations remain, scene unchanged otherwise).
+
+Be aware of these classic issues and address them in implementation:
+- Shadow acne: surfaces facing the light show black "stripes". Fix: angular-aware bias as in the prompt code.
+- Peter panning: shadows separated from objects ("floating" shadows). Fix: glCullFace(GL_FRONT) during shadow pass.
+- Out-of-frustum: objects outside the orthographic shadow bounds render fully shadowed. Fix: GL_CLAMP_TO_BORDER with border color 1.0, and the proj.z > 1.0 early-out in compute_shadow.
+- Self-shadowing on shadow caster: front-face culling can make THIN objects disappear from the shadow map. The backpack and floor are thick enough not to suffer.

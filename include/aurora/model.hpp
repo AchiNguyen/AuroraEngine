@@ -21,7 +21,7 @@ public:
     Model(Model&&) noexcept = default;
     Model& operator=(Model&&) noexcept = default;
 
-    void draw(Shader& shader) const;
+    void draw(Shader& shader, bool depth_only = false) const;
 
     std::size_t mesh_count()     const { return entries_.size(); }
     std::size_t vertex_count()   const { return total_vertices_; }

@@ -5,6 +5,7 @@
 #include "aurora/material.hpp"
 #include "aurora/model.hpp"
 #include "aurora/scene.hpp"
+#include "aurora/shadow_pass.hpp"
 #include "aurora/skybox.hpp"
 #include "aurora/transform.hpp"
 
@@ -24,6 +25,18 @@ SceneRenderer::SceneRenderer(std::shared_ptr<Shader> mesh_shader,
       lamp_mesh_  (std::move(lamp_mesh)) {}
 
 void SceneRenderer::draw(const Scene& scene, const Camera& camera, glm::ivec2 viewport_size) {
+    glm::mat4 light_space(1.0f);
+    const bool render_shadows = shadow_pass_ && scene.shadows_enabled;
+    if (render_shadows) {
+        light_space = ShadowPass::light_space_matrix(scene.dir_light,
+                                                     scene.scene_center,
+                                                     scene.scene_radius);
+        shadow_pass_->render(scene, light_space);
+        // Restore the default framebuffer + window viewport for the main pass.
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, viewport_size.x, viewport_size.y);
+    }
+
     const float aspect =
         static_cast<float>(viewport_size.x) /
         static_cast<float>(viewport_size.y > 0 ? viewport_size.y : 1);
@@ -52,6 +65,18 @@ void SceneRenderer::draw(const Scene& scene, const Camera& camera, glm::ivec2 vi
     }
     shader.set_uniform("u_num_point_lights", active_lights);
 
+    if (render_shadows) {
+        glActiveTexture(GL_TEXTURE0 + 3);
+        glBindTexture(GL_TEXTURE_2D, shadow_pass_->depth_texture_id());
+        shader.set_uniform("u_shadow_map",      3);
+        shader.set_uniform("u_light_space",     light_space);
+        shader.set_uniform("u_shadows_enabled", 1);
+        shader.set_uniform("u_shadow_bias_min", scene.shadow_bias_min);
+        shader.set_uniform("u_shadow_bias_max", scene.shadow_bias_max);
+    } else {
+        shader.set_uniform("u_shadows_enabled", 0);
+    }
+
     for (const auto& node : scene.models) {
         if (!node.visible || !node.model) continue;
         shader.set_uniform("u_model", node.transform.matrix());
@@ -79,6 +104,10 @@ void SceneRenderer::draw(const Scene& scene, const Camera& camera, glm::ivec2 vi
 
 void SceneRenderer::set_skybox(std::shared_ptr<Skybox> skybox) {
     skybox_ = std::move(skybox);
+}
+
+void SceneRenderer::set_shadow_pass(std::shared_ptr<ShadowPass> shadow_pass) {
+    shadow_pass_ = std::move(shadow_pass);
 }
 
 }

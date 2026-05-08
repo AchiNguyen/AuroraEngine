@@ -46,6 +46,13 @@ public:
     bool  skybox_enabled    = true;
     float skybox_brightness = 1.0f;
 
+    bool      shadows_enabled = true;
+    int       shadow_map_size = 2048;
+    float     shadow_bias_min = 0.0005f;
+    float     shadow_bias_max = 0.005f;
+    float     scene_radius    = 15.0f;
+    glm::vec3 scene_center{0.0f};
+
     ModelNode&      add_model(std::string name, std::shared_ptr<Model> model, Transform transform = {});
     PointLightNode& add_point_light(std::string name, PointLight light, Transform transform = {});
 

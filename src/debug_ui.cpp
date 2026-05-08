@@ -5,7 +5,9 @@
 #include "aurora/material.hpp"
 #include "aurora/model.hpp"
 #include "aurora/scene.hpp"
+#include "aurora/scene_renderer.hpp"
 #include "aurora/scene_state.hpp"
+#include "aurora/shadow_pass.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -15,6 +17,7 @@
 #include <glm/geometric.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 
 namespace aurora {
@@ -198,6 +201,27 @@ void DebugUI::render_panels(SceneState& state) {
         ImGui::Separator();
         ImGui::Checkbox   ("Skybox enabled",    &scene.skybox_enabled);
         ImGui::SliderFloat("Skybox brightness", &scene.skybox_brightness, 0.0f, 2.0f);
+    }
+    ImGui::End();
+
+    if (ImGui::Begin("Shadows")) {
+        ImGui::Checkbox   ("Enabled",      &scene.shadows_enabled);
+        ImGui::SliderFloat("Bias min",     &scene.shadow_bias_min, 0.0f, 0.01f, "%.5f");
+        ImGui::SliderFloat("Bias max",     &scene.shadow_bias_max, 0.0f, 0.05f, "%.5f");
+        ImGui::SliderFloat("Scene radius", &scene.scene_radius,    5.0f, 50.0f);
+        ImGui::SliderFloat3("Scene center", &scene.scene_center.x, -20.0f, 20.0f);
+
+        if (auto sp = state.renderer.shadow_pass()) {
+            ImGui::Text("Map size: %d x %d", sp->size().x, sp->size().y);
+            const auto tex_id = static_cast<std::uintptr_t>(sp->depth_texture_id());
+            ImGui::Image(reinterpret_cast<ImTextureID>(tex_id),
+                         ImVec2(192.0f, 192.0f),
+                         ImVec2(0.0f, 1.0f),
+                         ImVec2(1.0f, 0.0f));
+            ImGui::TextDisabled("Preview is the depth buffer; will look near-white.");
+        } else {
+            ImGui::TextDisabled("No shadow pass attached.");
+        }
     }
     ImGui::End();
 }

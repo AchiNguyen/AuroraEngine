@@ -52,6 +52,8 @@ add_executable(AuroraEngine
     src/plane.cpp
     src/cubemap.cpp
     src/skybox.cpp
+    src/framebuffer.cpp
+    src/shadow_pass.cpp
 )
 
 target_include_directories(AuroraEngine

@@ -9,6 +9,7 @@
 #include "aurora/scene_renderer.hpp"
 #include "aurora/scene_state.hpp"
 #include "aurora/shader.hpp"
+#include "aurora/shadow_pass.hpp"
 #include "aurora/skybox.hpp"
 #include "aurora/transform.hpp"
 #include "aurora/window.hpp"
@@ -37,7 +38,7 @@ int main() {
         aurora::GlfwContext glfw;
 
         aurora::WindowSpec spec;
-        spec.title = "Aurora \xE2\x80\x94 Stage 10";
+        spec.title = "Aurora \xE2\x80\x94 Stage 11";
         aurora::Window window(spec);
 
         glEnable(GL_DEPTH_TEST);
@@ -129,12 +130,15 @@ int main() {
             renderer.set_skybox(std::make_shared<aurora::Skybox>(std::move(cubemap)));
         }
 
+        renderer.set_shadow_pass(
+            std::make_shared<aurora::ShadowPass>(scene.shadow_map_size));
+
         glm::vec3 clear_color{0x0a / 255.0f, 0x0e / 255.0f, 0x27 / 255.0f};
-        aurora::SceneState scene_state{ scene, camera, clear_color };
+        aurora::SceneState scene_state{ scene, camera, clear_color, renderer };
 
         aurora::DebugUI debug_ui(window.handle());
 
-        spdlog::info("Aurora started \xE2\x80\x94 entering Stage 10 render loop");
+        spdlog::info("Aurora started \xE2\x80\x94 entering Stage 11 render loop");
         spdlog::info("Controls: WASD move, Space/LCtrl up-down, mouse look, TAB release cursor, ESC quit");
 
         double last_time     = glfwGetTime();

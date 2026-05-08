@@ -11,10 +11,12 @@ out vec3 v_world_normal;
 out vec3 v_world_tangent;
 out vec3 v_world_bitangent;
 out vec2 v_uv;
+out vec4 v_light_space_position;
 
 uniform mat4 u_model;
 uniform mat4 u_view;
 uniform mat4 u_projection;
+uniform mat4 u_light_space;
 
 void main() {
     vec4 world_pos     = u_model * vec4(a_position, 1.0);
@@ -29,6 +31,7 @@ void main() {
                                    - dot(v_world_tangent, v_world_normal) * v_world_normal);
     v_world_bitangent  = cross(v_world_normal, v_world_tangent);
 
-    v_uv        = a_uv;
-    gl_Position = u_projection * u_view * world_pos;
+    v_uv                   = a_uv;
+    v_light_space_position = u_light_space * world_pos;
+    gl_Position            = u_projection * u_view * world_pos;
 }

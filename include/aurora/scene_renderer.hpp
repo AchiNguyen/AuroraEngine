@@ -11,6 +11,7 @@ namespace aurora {
 
 class Camera;
 class Scene;
+class ShadowPass;
 class Skybox;
 
 class SceneRenderer {
@@ -31,11 +32,15 @@ public:
     void                    set_skybox(std::shared_ptr<Skybox> skybox);
     std::shared_ptr<Skybox> skybox() const { return skybox_; }
 
+    void                        set_shadow_pass(std::shared_ptr<ShadowPass> shadow_pass);
+    std::shared_ptr<ShadowPass> shadow_pass() const { return shadow_pass_; }
+
 private:
-    std::shared_ptr<Shader> mesh_shader_;
-    std::shared_ptr<Shader> lamp_shader_;
-    Mesh                    lamp_mesh_;
-    std::shared_ptr<Skybox> skybox_;
+    std::shared_ptr<Shader>     mesh_shader_;
+    std::shared_ptr<Shader>     lamp_shader_;
+    Mesh                        lamp_mesh_;
+    std::shared_ptr<Skybox>     skybox_;
+    std::shared_ptr<ShadowPass> shadow_pass_;
 };
 
 }

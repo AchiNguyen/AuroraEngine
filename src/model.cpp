@@ -160,9 +160,11 @@ Model::Model(Mesh mesh, Material material) {
     entries_.push_back(MeshEntry{ std::move(mesh), std::move(material) });
 }
 
-void Model::draw(Shader& shader) const {
+void Model::draw(Shader& shader, bool depth_only) const {
     for (const auto& entry : entries_) {
-        upload(shader, "u_material", entry.material);
+        if (!depth_only) {
+            upload(shader, "u_material", entry.material);
+        }
         entry.mesh.draw();
     }
 }
