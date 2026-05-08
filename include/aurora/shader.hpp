@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glad/glad.h>
+#include <glm/mat3x3.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 
@@ -27,6 +28,7 @@ public:
     GLuint id() const { return program_; }
 
     void set_uniform(const std::string& name, const glm::mat4& value);
+    void set_uniform(const std::string& name, const glm::mat3& value);
     void set_uniform(const std::string& name, const glm::vec3& value);
     void set_uniform(const std::string& name, float value);
     void set_uniform(const std::string& name, int value);

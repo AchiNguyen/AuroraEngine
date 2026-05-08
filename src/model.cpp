@@ -13,6 +13,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace aurora {
@@ -135,6 +136,13 @@ Model::Model(const std::filesystem::path& path)
 
     spdlog::info("Model '{}' loaded: meshes={} vertices={} triangles={} textures={}",
                  path.string(), entries_.size(), total_vertices_, total_triangles_, distinct.size());
+}
+
+Model::Model(Mesh mesh, Material material) {
+    const std::size_t idx = static_cast<std::size_t>(mesh.index_count());
+    total_triangles_ = idx / 3;
+    total_vertices_  = idx;
+    entries_.push_back(MeshEntry{ std::move(mesh), std::move(material) });
 }
 
 void Model::draw(Shader& shader) const {

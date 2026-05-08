@@ -10,13 +10,14 @@ out vec3 v_world_normal;
 out vec2 v_uv;
 
 uniform mat4 u_model;
+uniform mat3 u_normal_matrix;
 uniform mat4 u_view;
 uniform mat4 u_projection;
 
 void main() {
     vec4 world_pos = u_model * vec4(a_position, 1.0);
     v_world_position = world_pos.xyz;
-    v_world_normal = mat3(transpose(inverse(u_model))) * a_normal;
-    v_uv = a_uv;
-    gl_Position = u_projection * u_view * world_pos;
+    v_world_normal   = u_normal_matrix * a_normal;
+    v_uv             = a_uv;
+    gl_Position      = u_projection * u_view * world_pos;
 }

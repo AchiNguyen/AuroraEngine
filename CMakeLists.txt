@@ -46,6 +46,10 @@ add_executable(AuroraEngine
     src/model.cpp
     src/stb_image_impl.cpp
     src/debug_ui.cpp
+    src/transform.cpp
+    src/scene.cpp
+    src/scene_renderer.cpp
+    src/plane.cpp
 )
 
 target_include_directories(AuroraEngine

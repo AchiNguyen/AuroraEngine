@@ -1,0 +1,49 @@
+Stage 8: Scene system with multiple objects, multiple lights, and per-object transforms. Build on Stage 7.
+
+CONSTRAINTS:
+- Don't rewrite Model, Mesh, Material, Camera, Light, Texture, Shader, Window, DebugUI. Add a scene layer ABOVE them.
+- Update window title to "Aurora — Stage 8".
+- Multiple lights need to be supported in the fragment shader; refactor mesh.frag to loop over arrays.
+- Single directional light only (you only need one sun).
+
+NEW FILES:
+
+1. include/aurora/transform.hpp + src/transform.cpp — Transform struct:
+   - Fields: glm::vec3 position {0}, glm::vec3 rotation_euler {0} (degrees, around X, Y, Z), glm::vec3 scale {1}.
+   - matrix() returns the model matrix:
+       glm::mat4 m = glm::mat4(1.0f);
+       m = glm::translate(m, position);
+       m = glm::rotate(m, glm::radians(rotation_euler.y), {0,1,0});
+       m = glm::rotate(m, glm::radians(rotation_euler.x), {1,0,0});
+       m = glm::rotate(m, glm::radians(rotation_euler.z), {0,0,1});
+       m = glm::scale(m, scale);
+       return m;
+   - normal_matrix() returns mat3(transpose(inverse(matrix()))) for shader use.
+   - Header-only is fine; tiny class.
+
+2. include/aurora/scene.hpp + src/scene.cpp — Scene class:
+   - struct ModelNode { std::string name; std::shared_ptr<Model> model; Transform transform; bool visible = true; };
+   - struct PointLightNode { std::string name; PointLight light; Transform transform; bool visible = true; bool orbit = false; float orbit_radius = 3.0f; float orbit_phase = 0.0f; };
+     (orbit fields used by main.cpp animation loop; transform.position drives PointLight.position when orbit is off, vice versa when on)
+   - class Scene:
+       - std::vector<ModelNode> models;
+       - std::vector<PointLightNode> point_lights;
+       - DirectionalLight dir_light;  (single sun, exposed directly)
+       - glm::vec3 ambient_factor {0.1};  // used as global ambient multiplier
+       - add_model(name, std::shared_ptr<Model>, Transform = {}) -> ModelNode&;
+       - add_point_light(name, PointLight, Transform = {}) -> PointLightNode&;
+       - update(float dt) -- advances orbit phases for any orbiting lights.
+   - Note: Scene does NOT own GL state or the rendering. It's pure data.
+
+3. include/aurora/scene_renderer.hpp + src/scene_renderer.cpp — SceneRenderer class:
+   - Holds references / shared_ptrs to: Shader (mesh shader), Shader (lamp shader for visualizing point lights).
+   - draw(const Scene& scene, const Camera& camera, glm::ivec2 viewport_size):
+       - Compute view + projection matrices from camera and viewport aspect.
+       - mesh_shader.bind();
+       - Upload view, projection, view_position uniforms once.
+       - Upload directional light uniforms (single).
+       - Upload point lights as an array uniform: u_point_lights[i].position/.color/.intensity/.constant/.linear/.quadratic, plus int u_num_point_lights = scene.point_lights.size().
+       - For each ModelNode (if visible):
+           Upload u_model = node.transform.matrix();
+           Upload u_normal_matrix.
+           Upload material uniform

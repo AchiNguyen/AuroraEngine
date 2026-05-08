@@ -121,4 +121,16 @@ std::shared_ptr<Texture> Texture::black_fallback() {
     return p;
 }
 
+std::shared_ptr<Texture> Texture::make_solid_color(glm::vec3 color) {
+    auto to_byte = [](float v) -> unsigned char {
+        if (v <= 0.0f) return 0;
+        if (v >= 1.0f) return 255;
+        return static_cast<unsigned char>(v * 255.0f + 0.5f);
+    };
+    const unsigned char rgba[4] = {
+        to_byte(color.r), to_byte(color.g), to_byte(color.b), 0xFF,
+    };
+    return std::shared_ptr<Texture>(new Texture(1, 1, rgba, TextureType::Diffuse));
+}
+
 }

@@ -2,21 +2,23 @@
 #include "aurora/cube.hpp"
 #include "aurora/debug_ui.hpp"
 #include "aurora/light.hpp"
-#include "aurora/mesh.hpp"
 #include "aurora/model.hpp"
+#include "aurora/plane.hpp"
+#include "aurora/scene.hpp"
+#include "aurora/scene_renderer.hpp"
 #include "aurora/scene_state.hpp"
 #include "aurora/shader.hpp"
+#include "aurora/transform.hpp"
 #include "aurora/window.hpp"
 
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 #include <spdlog/spdlog.h>
 
-#include <cmath>
 #include <cstdlib>
 #include <exception>
+#include <memory>
 
 int main() {
 #ifdef AURORA_DEBUG
@@ -30,7 +32,7 @@ int main() {
         aurora::GlfwContext glfw;
 
         aurora::WindowSpec spec;
-        spec.title = "Aurora \xE2\x80\x94 Stage 7";
+        spec.title = "Aurora \xE2\x80\x94 Stage 8";
         aurora::Window window(spec);
 
         glEnable(GL_DEPTH_TEST);
@@ -39,54 +41,84 @@ int main() {
         const float initial_aspect =
             static_cast<float>(fb0.x) / static_cast<float>(fb0.y > 0 ? fb0.y : 1);
 
-        aurora::Camera camera(glm::vec3{0.0f, 0.0f, 5.0f}, initial_aspect);
-        aurora::Mesh   lamp = aurora::make_cube();
-        aurora::Shader shader     ("shaders/mesh.vert", "shaders/mesh.frag");
-        aurora::Shader lamp_shader("shaders/lamp.vert", "shaders/lamp.frag");
+        aurora::Camera camera(glm::vec3{0.0f, 1.0f, 6.0f}, initial_aspect);
 
-        aurora::Model model("assets/models/backpack/backpack.obj");
+        auto backpack = std::make_shared<aurora::Model>(
+            "assets/models/backpack/backpack.obj");
 
-        aurora::DirectionalLight dir_light{
+        aurora::Scene scene;
+        scene.dir_light = aurora::DirectionalLight{
             glm::vec3(-0.2f, -1.0f, -0.3f),
             glm::vec3( 1.0f,  0.95f, 0.85f),
             0.5f,
         };
-        aurora::PointLight point_light{
-            glm::vec3(2.0f, 2.0f, 2.0f),
-            glm::vec3(0.4f, 0.6f, 1.0f),
-            1.5f,
-        };
+        scene.ambient_factor = glm::vec3(0.1f);
 
-        bool      dir_light_enabled    = true;
-        bool      point_orbit_enabled  = true;
-        float     point_orbit_radius   = 3.0f;
-        bool      model_rotate_enabled = true;
-        float     model_rotation_speed = 20.0f;
-        glm::vec3 model_rotation_axis  {0.0f, 1.0f, 0.0f};
-        glm::vec3 clear_color {0x0a / 255.0f, 0x0e / 255.0f, 0x27 / 255.0f};
+        {
+            aurora::Transform t;
+            scene.add_model("backpack_center", backpack, t);
+        }
+        {
+            aurora::Transform t;
+            t.position       = glm::vec3(-3.0f, 0.0f, -1.0f);
+            t.rotation_euler = glm::vec3(0.0f,  30.0f, 0.0f);
+            t.scale          = glm::vec3(0.8f);
+            scene.add_model("backpack_left", backpack, t);
+        }
+        {
+            aurora::Transform t;
+            t.position       = glm::vec3( 3.0f, 0.0f, -1.0f);
+            t.rotation_euler = glm::vec3(0.0f, -30.0f, 0.0f);
+            t.scale          = glm::vec3(0.8f);
+            scene.add_model("backpack_right", backpack, t);
+        }
+        {
+            aurora::Material floor_mat;
+            floor_mat.diffuse_map  = aurora::Texture::make_solid_color(glm::vec3(0.4f, 0.4f, 0.4f));
+            floor_mat.specular_map = aurora::Texture::make_solid_color(glm::vec3(0.1f, 0.1f, 0.1f));
+            floor_mat.shininess    = 32.0f;
 
-        aurora::SceneState scene_state{
-            dir_light,
-            point_light,
-            model.primary_material(),
-            camera,
-            model_rotation_speed,
-            model_rotate_enabled,
-            model_rotation_axis,
-            clear_color,
-            dir_light_enabled,
-            point_orbit_enabled,
-            point_orbit_radius,
-        };
+            auto floor = std::make_shared<aurora::Model>(
+                aurora::make_plane(1.0f, 1.0f),
+                std::move(floor_mat));
+            aurora::Transform t;
+            t.position = glm::vec3(0.0f, -2.0f, 0.0f);
+            t.scale    = glm::vec3(20.0f, 1.0f, 20.0f);
+            scene.add_model("Floor", floor, t);
+        }
+
+        {
+            aurora::PointLight pl{
+                glm::vec3(4.0f, 1.5f, 0.0f),
+                glm::vec3(0.4f, 0.6f, 1.0f),
+                1.5f,
+            };
+            auto& node = scene.add_point_light("orbiter", pl);
+            node.orbit        = true;
+            node.orbit_radius = 4.0f;
+        }
+        {
+            aurora::PointLight pl{
+                glm::vec3(0.0f, 3.0f, 2.0f),
+                glm::vec3(1.0f, 0.4f, 0.2f),
+                2.0f,
+            };
+            scene.add_point_light("warm_top", pl);
+        }
+
+        aurora::SceneRenderer renderer(
+            std::make_shared<aurora::Shader>("shaders/mesh.vert", "shaders/mesh.frag"),
+            std::make_shared<aurora::Shader>("shaders/lamp.vert", "shaders/lamp.frag"),
+            aurora::make_cube()
+        );
+
+        glm::vec3 clear_color{0x0a / 255.0f, 0x0e / 255.0f, 0x27 / 255.0f};
+        aurora::SceneState scene_state{ scene, camera, clear_color };
 
         aurora::DebugUI debug_ui(window.handle());
 
-        spdlog::info("Aurora started \xE2\x80\x94 entering Stage 7 render loop");
+        spdlog::info("Aurora started \xE2\x80\x94 entering Stage 8 render loop");
         spdlog::info("Controls: WASD move, Space/LCtrl up-down, mouse look, TAB release cursor, ESC quit");
-
-        constexpr float kOrbitHeight = 1.5f;
-        float orbit_phase = 0.0f;
-        float model_angle_deg = 0.0f;
 
         double last_time     = glfwGetTime();
         double last_log_time = last_time;
@@ -97,6 +129,8 @@ int main() {
             const double now = glfwGetTime();
             const float  dt  = static_cast<float>(now - last_time);
             last_time = now;
+
+            scene.update(dt);
 
             debug_ui.record_frame(dt);
             debug_ui.begin_frame();
@@ -120,63 +154,15 @@ int main() {
             }
 
             const glm::ivec2 fb = window.framebuffer_size();
-            const float aspect =
-                static_cast<float>(fb.x) / static_cast<float>(fb.y > 0 ? fb.y : 1);
-
-            if (point_orbit_enabled) {
-                orbit_phase += dt;
-                point_light.position = glm::vec3(
-                    std::cos(orbit_phase) * point_orbit_radius,
-                    kOrbitHeight,
-                    std::sin(orbit_phase) * point_orbit_radius
-                );
-            }
-
-            if (model_rotate_enabled) {
-                model_angle_deg += model_rotation_speed * dt;
-            }
-            const float axis_len = glm::length(model_rotation_axis);
-            const glm::vec3 axis = (axis_len > 1e-5f)
-                ? model_rotation_axis / axis_len
-                : glm::vec3(0.0f, 1.0f, 0.0f);
-
-            const glm::mat4 model_mat =
-                glm::rotate(glm::mat4(1.0f),
-                            glm::radians(model_angle_deg),
-                            axis);
-            const glm::mat4 view       = camera.view_matrix();
-            const glm::mat4 projection = camera.projection_matrix(aspect);
 
             glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            aurora::DirectionalLight effective_dir = dir_light;
-            if (!dir_light_enabled) effective_dir.intensity = 0.0f;
-
-            shader.bind();
-            shader.set_uniform("u_model",         model_mat);
-            shader.set_uniform("u_view",          view);
-            shader.set_uniform("u_projection",    projection);
-            shader.set_uniform("u_view_position", camera.position());
-            aurora::upload(shader, "u_dir_light",   effective_dir);
-            aurora::upload(shader, "u_point_light", point_light);
-            model.draw(shader);
-
-            const glm::mat4 lamp_model =
-                glm::scale(glm::translate(glm::mat4(1.0f), point_light.position),
-                           glm::vec3(0.1f));
-            lamp_shader.bind();
-            lamp_shader.set_uniform("u_model",      lamp_model);
-            lamp_shader.set_uniform("u_view",       view);
-            lamp_shader.set_uniform("u_projection", projection);
-            lamp_shader.set_uniform("u_color",      point_light.color * point_light.intensity);
-            lamp.draw();
+            renderer.draw(scene, camera, fb);
 
             if (now - last_log_time >= 1.0) {
-                spdlog::debug("Point light at ({:.2f}, {:.2f}, {:.2f})",
-                              point_light.position.x,
-                              point_light.position.y,
-                              point_light.position.z);
+                spdlog::debug("Scene: {} models, {} point lights",
+                              scene.models.size(), scene.point_lights.size());
                 last_log_time = now;
             }
 

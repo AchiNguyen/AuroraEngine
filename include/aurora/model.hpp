@@ -14,6 +14,7 @@ class Shader;
 class Model {
 public:
     explicit Model(const std::filesystem::path& path);
+    Model(Mesh mesh, Material material);
 
     Model(const Model&) = delete;
     Model& operator=(const Model&) = delete;

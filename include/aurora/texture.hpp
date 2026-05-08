@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glad/glad.h>
+#include <glm/vec3.hpp>
 
 #include <filesystem>
 #include <memory>
@@ -28,6 +29,9 @@ public:
     // shared across all materials that need them.
     static std::shared_ptr<Texture> white_fallback();
     static std::shared_ptr<Texture> black_fallback();
+
+    // 1x1 RGBA texture with the given linear color (each channel clamped to [0,1]).
+    static std::shared_ptr<Texture> make_solid_color(glm::vec3 color);
 
 private:
     Texture(int width, int height, const unsigned char* rgba_pixels, TextureType type);
