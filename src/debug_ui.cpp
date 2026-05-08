@@ -4,6 +4,7 @@
 #include "aurora/light.hpp"
 #include "aurora/material.hpp"
 #include "aurora/model.hpp"
+#include "aurora/post_processor.hpp"
 #include "aurora/scene.hpp"
 #include "aurora/scene_renderer.hpp"
 #include "aurora/scene_state.hpp"
@@ -121,7 +122,7 @@ void DebugUI::render_panels(SceneState& state) {
                 (len > 1e-5f) ? dir / len : glm::vec3(0.0f, -1.0f, 0.0f);
         }
         ImGui::ColorEdit3 ("Color",     &scene.dir_light.color.x);
-        ImGui::SliderFloat("Intensity", &scene.dir_light.intensity, 0.0f, 5.0f);
+        ImGui::SliderFloat("Intensity", &scene.dir_light.intensity, 0.0f, 10.0f);
     }
     ImGui::End();
 
@@ -152,7 +153,7 @@ void DebugUI::render_panels(SceneState& state) {
                     }
                 }
                 ImGui::ColorEdit3 ("Color",     &node.light.color.x);
-                ImGui::SliderFloat("Intensity", &node.light.intensity, 0.0f, 10.0f);
+                ImGui::SliderFloat("Intensity", &node.light.intensity, 0.0f, 25.0f);
                 ImGui::Separator();
                 ImGui::SliderFloat("Constant",  &node.light.constant,  0.1f, 2.0f);
                 ImGui::SliderFloat("Linear",    &node.light.linear,    0.0f, 1.0f, "%.4f");
@@ -201,6 +202,33 @@ void DebugUI::render_panels(SceneState& state) {
         ImGui::Separator();
         ImGui::Checkbox   ("Skybox enabled",    &scene.skybox_enabled);
         ImGui::SliderFloat("Skybox brightness", &scene.skybox_brightness, 0.0f, 2.0f);
+    }
+    ImGui::End();
+
+    if (ImGui::Begin("Post")) {
+        ImGui::SliderFloat("Exposure",
+                           &scene.exposure,
+                           0.1f, 5.0f, "%.2f",
+                           ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderFloat("Gamma", &scene.gamma, 1.0f, 3.0f);
+        ImGui::Separator();
+        ImGui::Checkbox   ("Bloom enabled",     &scene.bloom_enabled);
+        ImGui::SliderFloat("Bloom threshold",   &scene.bloom_threshold, 0.0f, 5.0f);
+        ImGui::SliderFloat("Bloom intensity",
+                           &scene.bloom_intensity,
+                           0.0f, 0.5f, "%.4f",
+                           ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderFloat("Bloom radius",      &scene.bloom_radius,    0.5f, 4.0f);
+        ImGui::SliderInt  ("Bloom blur passes", &scene.bloom_blur_passes, 1, 8);
+        ImGui::Separator();
+        if (state.post) {
+            const glm::ivec2 hdr = state.post->hdr_size();
+            const glm::ivec2 bloom = state.post->bloom_size();
+            ImGui::Text("HDR FBO size  : %d x %d", hdr.x, hdr.y);
+            ImGui::Text("Bloom buffers : %d x %d", bloom.x, bloom.y);
+        } else {
+            ImGui::TextDisabled("PostProcessor not attached.");
+        }
     }
     ImGui::End();
 

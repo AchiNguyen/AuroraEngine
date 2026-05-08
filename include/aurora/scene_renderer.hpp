@@ -27,6 +27,13 @@ public:
     SceneRenderer(SceneRenderer&&) noexcept = default;
     SceneRenderer& operator=(SceneRenderer&&) noexcept = default;
 
+    // Runs the shadow pass into the shadow FBO. Leaves no specific framebuffer
+    // bound by contract; the caller must bind the desired target FBO before
+    // calling draw(). Safe to call when shadows are disabled (no-op).
+    void run_shadow_pass(const Scene& scene);
+
+    // Renders the scene (models, lamps, skybox) into whichever framebuffer is
+    // currently bound by the caller. Does not touch framebuffer bindings.
     void draw(const Scene& scene, const Camera& camera, glm::ivec2 viewport_size);
 
     void                    set_skybox(std::shared_ptr<Skybox> skybox);

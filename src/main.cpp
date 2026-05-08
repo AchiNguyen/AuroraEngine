@@ -5,6 +5,7 @@
 #include "aurora/light.hpp"
 #include "aurora/model.hpp"
 #include "aurora/plane.hpp"
+#include "aurora/post_processor.hpp"
 #include "aurora/scene.hpp"
 #include "aurora/scene_renderer.hpp"
 #include "aurora/scene_state.hpp"
@@ -38,7 +39,7 @@ int main() {
         aurora::GlfwContext glfw;
 
         aurora::WindowSpec spec;
-        spec.title = "Aurora \xE2\x80\x94 Stage 11";
+        spec.title = "Aurora \xE2\x80\x94 Stage 12";
         aurora::Window window(spec);
 
         glEnable(GL_DEPTH_TEST);
@@ -134,15 +135,19 @@ int main() {
             std::make_shared<aurora::ShadowPass>(scene.shadow_map_size));
 
         glm::vec3 clear_color{0x0a / 255.0f, 0x0e / 255.0f, 0x27 / 255.0f};
-        aurora::SceneState scene_state{ scene, camera, clear_color, renderer };
+
+        aurora::PostProcessor post(fb0.x, fb0.y);
+
+        aurora::SceneState scene_state{ scene, camera, clear_color, renderer, &post };
 
         aurora::DebugUI debug_ui(window.handle());
 
-        spdlog::info("Aurora started \xE2\x80\x94 entering Stage 11 render loop");
+        spdlog::info("Aurora started \xE2\x80\x94 entering Stage 12 render loop");
         spdlog::info("Controls: WASD move, Space/LCtrl up-down, mouse look, TAB release cursor, ESC quit");
 
         double last_time     = glfwGetTime();
         double last_log_time = last_time;
+        glm::ivec2 last_fb = fb0;
 
         while (!window.should_close()) {
             window.poll_events();
@@ -175,11 +180,28 @@ int main() {
             }
 
             const glm::ivec2 fb = window.framebuffer_size();
+            if (fb.x > 0 && fb.y > 0 && (fb.x != last_fb.x || fb.y != last_fb.y)) {
+                post.resize(fb.x, fb.y);
+                last_fb = fb;
+            }
 
-            glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            // 1) Shadow pass into its own FBO.
+            renderer.run_shadow_pass(scene);
 
-            renderer.draw(scene, camera, fb);
+            // 2) Bind HDR FBO and render the scene into it.
+            post.begin_scene_pass(clear_color.r, clear_color.g, clear_color.b);
+            renderer.draw(scene, camera, post.hdr_size());
+
+            // 3) Bloom + tone-map composite into the window framebuffer.
+            aurora::PostParams pp;
+            pp.exposure          = scene.exposure;
+            pp.bloom_threshold   = scene.bloom_threshold;
+            pp.bloom_intensity   = scene.bloom_intensity;
+            pp.bloom_radius      = scene.bloom_radius;
+            pp.bloom_blur_passes = scene.bloom_blur_passes;
+            pp.gamma             = scene.gamma;
+            pp.bloom_enabled     = scene.bloom_enabled;
+            post.end_frame_to_window(fb.x, fb.y, pp);
 
             if (now - last_log_time >= 1.0) {
                 spdlog::debug("Scene: {} models, {} point lights",
@@ -187,6 +209,7 @@ int main() {
                 last_log_time = now;
             }
 
+            // 4) ImGui draws on the window framebuffer (post-tone-map).
             debug_ui.render_panels(scene_state);
             debug_ui.end_frame();
 

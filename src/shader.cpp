@@ -163,6 +163,12 @@ void Shader::set_uniform(const std::string& name, const glm::vec3& value) {
     glProgramUniform3fv(program_, loc, 1, glm::value_ptr(value));
 }
 
+void Shader::set_uniform(const std::string& name, const glm::vec2& value) {
+    const GLint loc = uniform_location(name);
+    if (loc < 0) return;
+    glProgramUniform2fv(program_, loc, 1, glm::value_ptr(value));
+}
+
 void Shader::set_uniform(const std::string& name, float value) {
     const GLint loc = uniform_location(name);
     if (loc < 0) return;

@@ -53,6 +53,15 @@ public:
     float     scene_radius    = 15.0f;
     glm::vec3 scene_center{0.0f};
 
+    // HDR / post-processing parameters (Stage 12).
+    float exposure          = 1.0f;
+    float bloom_threshold   = 1.0f;
+    float bloom_intensity   = 0.05f;
+    float bloom_radius      = 1.5f;
+    int   bloom_blur_passes = 5;
+    float gamma             = 2.2f;
+    bool  bloom_enabled     = true;
+
     ModelNode&      add_model(std::string name, std::shared_ptr<Model> model, Transform transform = {});
     PointLightNode& add_point_light(std::string name, PointLight light, Transform transform = {});
 

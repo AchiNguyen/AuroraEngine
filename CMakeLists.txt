@@ -54,6 +54,7 @@ add_executable(AuroraEngine
     src/skybox.cpp
     src/framebuffer.cpp
     src/shadow_pass.cpp
+    src/post_processor.cpp
 )
 
 target_include_directories(AuroraEngine

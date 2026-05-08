@@ -5,6 +5,7 @@
 namespace aurora {
 
 class Camera;
+class PostProcessor;
 class Scene;
 class SceneRenderer;
 
@@ -13,6 +14,7 @@ struct SceneState {
     Camera&        camera;
     glm::vec3&     clear_color;
     SceneRenderer& renderer;
+    PostProcessor* post = nullptr;
 };
 
 }

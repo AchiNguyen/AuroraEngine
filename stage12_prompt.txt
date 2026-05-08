@@ -1,0 +1,206 @@
+Stage 12: HDR rendering + bloom + ACES tone mapping. Build on Stage 11.
+
+CONSTRAINTS:
+- Update window title to "Aurora — Stage 12".
+- Don't change scene contents, lighting, model loading, or shadow logic.
+- All scene rendering now goes to an offscreen HDR framebuffer; bloom processes it; tone mapping is the final step that writes to the window framebuffer.
+
+ARCHITECTURAL CHANGES:
+
+The render pipeline becomes a multi-pass chain:
+
+  1. Shadow pass (existing)        -> shadow_pass.depth_texture
+  2. Scene pass (modified)          -> hdr_framebuffer (RGBA16F, depth)
+  3. Bloom extract pass            -> bloom_threshold_framebuffer (RGBA16F)
+  4. Bloom blur pass (N iterations) -> ping/pong between two RGBA16F framebuffers
+  5. Tone-map composite pass        -> window framebuffer (RGBA8 default)
+  6. ImGui (last, on the window framebuffer as before)
+
+NEW FILES:
+
+1. Update include/aurora/framebuffer.hpp + src/framebuffer.cpp:
+   - Add a kind for HDR color framebuffer:
+       Framebuffer Framebuffer::hdr_color(int w, int h, bool with_depth);
+       Internal format: GL_RGBA16F.
+       MIN/MAG: GL_LINEAR (needed for blur sampling).
+       WRAP: GL_CLAMP_TO_EDGE.
+   - Add a method to resize the FBO when the window resizes (re-create attachments at new size).
+   - Add color_texture_id() / depth_texture_id() / size() accessors.
+
+2. include/aurora/post_processor.hpp + src/post_processor.cpp — owns and orchestrates post-processing:
+   - Owns:
+       Framebuffer hdr_fbo;                  // scene renders here (RGBA16F + depth)
+       Framebuffer bloom_threshold_fbo;     // RGBA16F, no depth
+       Framebuffer bloom_pingpong[2];       // RGBA16F, no depth, half resolution for performance
+       Shader threshold_shader;              // shaders/post/bloom_threshold.frag
+       Shader blur_shader;                   // shaders/post/blur.frag (gaussian, configurable horizontal/vertical)
+       Shader composite_shader;              // shaders/post/composite.frag (tone-mapping + bloom add + gamma)
+       GLuint fullscreen_triangle_vao;       // a VAO for a single triangle covering NDC, generated procedurally in shader (see below)
+   - Constructor: builds all framebuffers at given window size; loads all shaders.
+   - resize(int w, int h): resizes hdr_fbo to (w,h); bloom buffers stay at (w/2, h/2).
+   - begin_scene_pass(): glBindFramebuffer(hdr_fbo); glViewport(0,0,w,h); glClear(...);
+       Returns the FBO so caller can use it. (Or just bind it; caller proceeds normally.)
+   - end_frame_to_window(int window_w, int window_h, float bloom_intensity, float exposure):
+       1. Run threshold pass: read hdr_fbo color, write to bloom_threshold_fbo.
+       2. Run N (default 5) iterations of separable Gaussian blur, ping-ponging between bloom_pingpong[0] and bloom_pingpong[1]. Final result is in bloom_pingpong[(N-1) & 1].
+       3. Bind window framebuffer (id=0); glViewport(0,0,window_w,window_h).
+       4. Run composite shader: input = hdr_fbo color + final blurred bloom; output = tone-mapped, gamma-corrected RGBA8.
+   - Helper: draws fullscreen triangle (no VBO needed; vertex shader generates positions from gl_VertexID).
+
+NEW SHADERS:
+
+shaders/post/fullscreen.vert — used by all post-processing passes:
+   #version 460 core
+   out vec2 v_uv;
+   void main() {
+       // Generate a single full-screen triangle covering NDC.
+       // Vertex 0: (-1,-1), Vertex 1: (3,-1), Vertex 2: (-1, 3)
+       vec2 positions[3] = vec2[](vec2(-1, -1), vec2(3, -1), vec2(-1, 3));
+       vec2 pos = positions[gl_VertexID];
+       v_uv = pos * 0.5 + 0.5;
+       gl_Position = vec4(pos, 0.0, 1.0);
+   }
+
+shaders/post/bloom_threshold.frag — extract bright pixels:
+   #version 460 core
+   in vec2 v_uv;
+   out vec4 frag_color;
+   uniform sampler2D u_hdr_color;
+   uniform float u_threshold;     // default 1.0
+   uniform float u_soft_knee;     // default 0.5; smooth fade-in around threshold
+
+   void main() {
+       vec3 c = texture(u_hdr_color, v_uv).rgb;
+       float brightness = max(c.r, max(c.g, c.b));
+       float knee = u_threshold * u_soft_knee + 1e-5;
+       float soft = clamp(brightness - u_threshold + knee, 0.0, 2.0 * knee);
+       soft = soft * soft / (4.0 * knee);
+       float contribution = max(soft, brightness - u_threshold);
+       contribution /= max(brightness, 1e-5);
+       frag_color = vec4(c * contribution, 1.0);
+   }
+
+shaders/post/blur.frag — separable Gaussian (sampled along one axis at a time):
+   #version 460 core
+   in vec2 v_uv;
+   out vec4 frag_color;
+   uniform sampler2D u_input;
+   uniform vec2 u_direction;     // (1,0) for horizontal pass, (0,1) for vertical pass
+   uniform float u_radius;        // default ~3 texels worth in each direction
+
+   void main() {
+       vec2 texel = 1.0 / textureSize(u_input, 0);
+       // 9-tap separable Gaussian (standard weights):
+       float weights[5] = float[](0.227027, 0.1945946, 0.1216216, 0.054054, 0.016216);
+       vec3 result = texture(u_input, v_uv).rgb * weights[0];
+       for (int i = 1; i < 5; ++i) {
+           vec2 offset = u_direction * texel * float(i) * u_radius;
+           result += texture(u_input, v_uv + offset).rgb * weights[i];
+           result += texture(u_input, v_uv - offset).rgb * weights[i];
+       }
+       frag_color = vec4(result, 1.0);
+   }
+
+shaders/post/composite.frag — combine HDR + bloom, tone-map, gamma-correct:
+   #version 460 core
+   in vec2 v_uv;
+   out vec4 frag_color;
+   uniform sampler2D u_hdr_color;
+   uniform sampler2D u_bloom_color;
+   uniform float u_exposure;          // default 1.0
+   uniform float u_bloom_intensity;   // default 0.05 (small; bloom should add, not dominate)
+   uniform float u_gamma;              // default 2.2
+
+   // ACES filmic tonemapping (Narkowicz 2015 fit of the ACES curve)
+   vec3 aces_tonemap(vec3 x) {
+       const float a = 2.51;
+       const float b = 0.03;
+       const float c = 2.43;
+       const float d = 0.59;
+       const float e = 0.14;
+       return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+   }
+
+   void main() {
+       vec3 hdr   = texture(u_hdr_color, v_uv).rgb;
+       vec3 bloom = texture(u_bloom_color, v_uv).rgb;
+       vec3 mixed = hdr + bloom * u_bloom_intensity;
+       vec3 tonemapped = aces_tonemap(mixed * u_exposure);
+       vec3 gamma_corrected = pow(tonemapped, vec3(1.0 / u_gamma));
+       frag_color = vec4(gamma_corrected, 1.0);
+   }
+
+INTEGRATION:
+
+main.cpp / scene_renderer / wherever the render loop lives:
+   PostProcessor post(window.width(), window.height());
+
+   // Window resize callback:
+   //   post.resize(new_w, new_h);
+
+   Per frame:
+       shadow_pass.render(scene, light_space);
+
+       post.begin_scene_pass();             // binds HDR FBO
+       scene_renderer.draw(scene, camera);  // backpacks, floor, lamps, skybox -- all into HDR FBO
+
+       post.end_frame_to_window(window.width(), window.height(),
+                                 scene.bloom_intensity, scene.exposure);
+
+       debug_ui.begin_frame();
+       debug_ui.render_panels(scene, ...);
+       debug_ui.end_frame();                 // ImGui draws on window FBO directly, post-tone-map
+
+       glfwSwapBuffers(...);
+
+SCENE STATE / DEBUG UI:
+
+Scene struct gains:
+   float exposure          = 1.0f;   // multiplied into HDR before tone map; brighter overall
+   float bloom_threshold    = 1.0f;
+   float bloom_intensity    = 0.05f;
+   float bloom_radius       = 1.5f;  // multiplier on blur kernel size
+   int   bloom_blur_passes  = 5;     // pairs of horizontal+vertical blurs
+   float gamma              = 2.2f;
+   bool  bloom_enabled      = true;
+
+New "Post" panel in DebugUI:
+   - SliderFloat "Exposure" (0.1 to 5.0, log-style).
+   - SliderFloat "Gamma" (1.0 to 3.0).
+   - Checkbox "Bloom enabled".
+   - SliderFloat "Bloom threshold" (0 to 5).
+   - SliderFloat "Bloom intensity" (0 to 0.5, log-style or linear small range).
+   - SliderFloat "Bloom radius" (0.5 to 4.0).
+   - SliderInt   "Bloom blur passes" (1 to 8).
+   - Read-only "HDR FBO size".
+
+Also in the Directional Light panel:
+   - The intensity slider should now go up to 10.0 or higher (HDR allows this; previously clamped lights had no benefit beyond ~2).
+Also in Point Light panel:
+   - Same: intensity slider can go to 20+ for genuinely glowy lights.
+
+CMAKE:
+- Add new sources: src/post_processor.cpp.
+- Add framebuffer.cpp updates.
+- New shader files copied to runtime: shaders/post/*.{vert,frag}.
+
+GOTCHAS TO HANDLE:
+
+- ImGui must be drawn AFTER tone mapping (i.e., into the window framebuffer). If it's drawn before, the UI itself gets tone-mapped and gamma-corrected, looking too dim.
+- The skybox should be drawn into the HDR framebuffer like everything else (so it tone-maps correctly).
+- The shadow pass writes to its own FBO and is unaffected.
+- Window resize must trigger post.resize(); add a GLFW framebuffer-size callback if not already wired up. The depth attachment of the HDR FBO must match the new size or shadows/depth-test will break.
+- The bloom buffers being half-resolution is intentional (much faster, blur looks the same).
+- The fullscreen-triangle technique uses gl_VertexID; you bind an EMPTY VAO (no attribs) and call glDrawArrays(GL_TRIANGLES, 0, 3). Make sure the VAO is bound (a VAO must be bound for draw calls in core profile, even if empty).
+
+DELIVERABLES:
+- New: post_processor.hpp/cpp, shaders/post/* (4 files).
+- Updated: framebuffer.hpp/cpp (HDR variant + resize), Scene struct, DebugUI (Post panel + intensity slider ranges), main.cpp (post pipeline integration), CMakeLists.txt (new sources + shader copy).
+
+End with the build steps. Expected result: the same scene, but now with a noticeable filmic look. The orbiting blue point light glows. The metal highlights softly bloom. The sky-meets-water transition is smoother. The directional sun cranked up to intensity 5 shows visible bloom around bright surfaces. Dragging the Exposure slider acts like a camera ISO — you can over-or-under expose the scene gracefully without harsh clipping.
+
+Take screenshots at:
+  bloom_intensity = 0    (no bloom; baseline)
+  bloom_intensity = 0.05 (subtle, default)
+  bloom_intensity = 0.3  (heavy, almost JJ Abrams)
+to verify the slider has visible effect.

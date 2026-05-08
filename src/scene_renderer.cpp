@@ -24,6 +24,14 @@ SceneRenderer::SceneRenderer(std::shared_ptr<Shader> mesh_shader,
       lamp_shader_(std::move(lamp_shader)),
       lamp_mesh_  (std::move(lamp_mesh)) {}
 
+void SceneRenderer::run_shadow_pass(const Scene& scene) {
+    if (!shadow_pass_ || !scene.shadows_enabled) return;
+    const glm::mat4 light_space = ShadowPass::light_space_matrix(scene.dir_light,
+                                                                 scene.scene_center,
+                                                                 scene.scene_radius);
+    shadow_pass_->render(scene, light_space);
+}
+
 void SceneRenderer::draw(const Scene& scene, const Camera& camera, glm::ivec2 viewport_size) {
     glm::mat4 light_space(1.0f);
     const bool render_shadows = shadow_pass_ && scene.shadows_enabled;
@@ -31,10 +39,6 @@ void SceneRenderer::draw(const Scene& scene, const Camera& camera, glm::ivec2 vi
         light_space = ShadowPass::light_space_matrix(scene.dir_light,
                                                      scene.scene_center,
                                                      scene.scene_radius);
-        shadow_pass_->render(scene, light_space);
-        // Restore the default framebuffer + window viewport for the main pass.
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, viewport_size.x, viewport_size.y);
     }
 
     const float aspect =
