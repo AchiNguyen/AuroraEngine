@@ -1,13 +1,67 @@
 #version 460 core
 
+in vec3 v_world_position;
+in vec3 v_world_normal;
 in vec3 v_color;
-in vec3 v_normal;
 
 out vec4 frag_color;
 
+struct Material {
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+    float shininess;
+};
+
+struct DirectionalLight {
+    vec3 direction;
+    vec3 color;
+    float intensity;
+};
+
+struct PointLight {
+    vec3 position;
+    vec3 color;
+    float intensity;
+    float constant;
+    float linear;
+    float quadratic;
+};
+
+uniform Material u_material;
+uniform DirectionalLight u_dir_light;
+uniform PointLight u_point_light;
+uniform vec3 u_view_position;
+
+vec3 phong_directional(DirectionalLight light, vec3 normal, vec3 view_dir) {
+    vec3 light_dir = normalize(-light.direction);
+    float diff = max(dot(normal, light_dir), 0.0);
+    vec3 reflect_dir = reflect(-light_dir, normal);
+    float spec = pow(max(dot(view_dir, reflect_dir), 0.0), u_material.shininess);
+    vec3 ambient  = light.color * u_material.ambient;
+    vec3 diffuse  = light.color * diff * u_material.diffuse;
+    vec3 specular = light.color * spec * u_material.specular;
+    return (ambient + diffuse + specular) * light.intensity;
+}
+
+vec3 phong_point(PointLight light, vec3 normal, vec3 frag_pos, vec3 view_dir) {
+    vec3 light_dir = normalize(light.position - frag_pos);
+    float diff = max(dot(normal, light_dir), 0.0);
+    vec3 reflect_dir = reflect(-light_dir, normal);
+    float spec = pow(max(dot(view_dir, reflect_dir), 0.0), u_material.shininess);
+    float distance = length(light.position - frag_pos);
+    float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * distance * distance);
+    vec3 ambient  = light.color * u_material.ambient;
+    vec3 diffuse  = light.color * diff * u_material.diffuse;
+    vec3 specular = light.color * spec * u_material.specular;
+    return (ambient + diffuse + specular) * light.intensity * attenuation;
+}
+
 void main() {
-    vec3 light_dir = normalize(vec3(0.5, 1.0, 0.3));
-    float ndotl = max(dot(normalize(v_normal), light_dir), 0.0);
-    float ambient = 0.25;
-    frag_color = vec4(v_color * (ambient + ndotl * 0.75), 1.0);
+    vec3 normal = normalize(v_world_normal);
+    vec3 view_dir = normalize(u_view_position - v_world_position);
+    vec3 result = phong_directional(u_dir_light, normal, view_dir)
+                + phong_point(u_point_light, normal, v_world_position, view_dir);
+    // Multiply by per-vertex color so each face still carries its tint.
+    frag_color = vec4(result * v_color, 1.0);
 }

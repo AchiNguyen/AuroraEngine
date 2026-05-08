@@ -1,4 +1,4 @@
-﻿if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
         CACHE STRING "vcpkg toolchain file")
 endif()
@@ -37,6 +37,8 @@ add_executable(AuroraEngine
     src/mesh.cpp
     src/cube.cpp
     src/camera.cpp
+    src/light.cpp
+    src/material.cpp
 )
 
 target_include_directories(AuroraEngine

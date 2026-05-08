@@ -1,5 +1,7 @@
 #include "aurora/camera.hpp"
 #include "aurora/cube.hpp"
+#include "aurora/light.hpp"
+#include "aurora/material.hpp"
 #include "aurora/mesh.hpp"
 #include "aurora/shader.hpp"
 #include "aurora/window.hpp"
@@ -10,6 +12,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <spdlog/spdlog.h>
 
+#include <cmath>
 #include <cstdlib>
 #include <exception>
 
@@ -34,7 +37,7 @@ int main() {
         aurora::GlfwContext glfw;
 
         aurora::WindowSpec spec;
-        spec.title = "Aurora \xE2\x80\x94 Stage 3A";
+        spec.title = "Aurora \xE2\x80\x94 Stage 4";
         aurora::Window window(spec);
 
         glEnable(GL_DEPTH_TEST);
@@ -44,13 +47,28 @@ int main() {
             static_cast<float>(fb0.x) / static_cast<float>(fb0.y > 0 ? fb0.y : 1);
 
         aurora::Camera camera(glm::vec3{0.0f, 0.0f, 3.0f}, initial_aspect);
-        aurora::Mesh   cube   = aurora::make_cube();
-        aurora::Shader shader("shaders/mesh.vert", "shaders/mesh.frag");
+        aurora::Mesh   cube = aurora::make_cube();
+        aurora::Mesh   lamp = aurora::make_cube();
+        aurora::Shader shader     ("shaders/mesh.vert", "shaders/mesh.frag");
+        aurora::Shader lamp_shader("shaders/lamp.vert", "shaders/lamp.frag");
 
-        spdlog::info("Aurora started \xE2\x80\x94 entering render loop");
+        aurora::DirectionalLight dir_light{
+            glm::vec3(-0.2f, -1.0f, -0.3f),
+            glm::vec3( 1.0f,  0.95f, 0.85f),
+            0.5f,
+        };
+        aurora::PointLight point_light{
+            glm::vec3(2.0f, 2.0f, 2.0f),
+            glm::vec3(0.4f, 0.6f, 1.0f),
+            1.5f,
+        };
+        const aurora::Material material = aurora::Material::brass;
+
+        spdlog::info("Aurora started \xE2\x80\x94 entering Stage 4 render loop");
         spdlog::info("Controls: WASD move, Space/LCtrl up-down, mouse look, TAB release cursor, ESC quit");
 
-        double last_time = glfwGetTime();
+        double last_time     = glfwGetTime();
+        double last_log_time = last_time;
 
         while (!window.should_close()) {
             window.poll_events();
@@ -76,21 +94,56 @@ int main() {
             const float aspect =
                 static_cast<float>(fb.x) / static_cast<float>(fb.y > 0 ? fb.y : 1);
 
-            const glm::mat4 model = glm::rotate(glm::mat4(1.0f),
-                                                static_cast<float>(now) * glm::radians(45.0f),
-                                                glm::vec3(0.5f, 1.0f, 0.0f));
+            const float t = static_cast<float>(now);
+
+            // Orbit the point light in a horizontal circle around the cube.
+            constexpr float kOrbitRadius = 3.0f;
+            constexpr float kOrbitHeight = 1.5f;
+            point_light.position = glm::vec3(
+                std::cos(t) * kOrbitRadius,
+                kOrbitHeight,
+                std::sin(t) * kOrbitRadius
+            );
+
+            const glm::mat4 model =
+                glm::rotate(glm::mat4(1.0f),
+                            t * glm::radians(45.0f),
+                            glm::vec3(0.5f, 1.0f, 0.0f));
             const glm::mat4 view       = camera.view_matrix();
             const glm::mat4 projection = camera.projection_matrix(aspect);
 
             glClearColor(kClearR, kClearG, kClearB, kClearA);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            shader.set_uniform("u_model",      model);
-            shader.set_uniform("u_view",       view);
-            shader.set_uniform("u_projection", projection);
-
+            // --- Lit cube pass ---
             shader.bind();
+            shader.set_uniform("u_model",         model);
+            shader.set_uniform("u_view",          view);
+            shader.set_uniform("u_projection",    projection);
+            shader.set_uniform("u_view_position", camera.position());
+            aurora::upload(shader, "u_material",    material);
+            aurora::upload(shader, "u_dir_light",   dir_light);
+            aurora::upload(shader, "u_point_light", point_light);
             cube.draw();
+
+            // --- Unlit lamp pass at the point light's position ---
+            const glm::mat4 lamp_model =
+                glm::scale(glm::translate(glm::mat4(1.0f), point_light.position),
+                           glm::vec3(0.1f));
+            lamp_shader.bind();
+            lamp_shader.set_uniform("u_model",      lamp_model);
+            lamp_shader.set_uniform("u_view",       view);
+            lamp_shader.set_uniform("u_projection", projection);
+            lamp_shader.set_uniform("u_color",      point_light.color * point_light.intensity);
+            lamp.draw();
+
+            if (now - last_log_time >= 1.0) {
+                spdlog::debug("Point light at ({:.2f}, {:.2f}, {:.2f})",
+                              point_light.position.x,
+                              point_light.position.y,
+                              point_light.position.z);
+                last_log_time = now;
+            }
 
             window.swap_buffers();
         }

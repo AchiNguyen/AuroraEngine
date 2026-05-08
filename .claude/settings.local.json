@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo \"exit=$?\")",
+      "PowerShell(if \\(Test-Path \"out\\\\build\\\\x64-Debug\\\\CMakeCache.txt\"\\) { Write-Output \"VS_DEBUG_PRESENT\" } else { Write-Output \"NO_VS_DEBUG\" }; if \\(Test-Path \"build\\\\CMakeCache.txt\"\\) { Write-Output \"BUILD_PRESENT\" } else { Write-Output \"NO_BUILD\" }; if \\($env:VCPKG_ROOT\\) { Write-Output \"VCPKG_ROOT=$env:VCPKG_ROOT\" } else { Write-Output \"NO_VCPKG_ROOT\" })",
+      "PowerShell(cmake *)",
+      "PowerShell(Get-Process *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(Rename-Item *)",
+      "Bash(cmd.exe /c '\"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\VC\\\\Auxiliary\\\\Build\\\\vcvars64.bat\" >NUL && cmake --build \"out\\\\build\\\\x64-Debug\" --target AuroraEngine 2>&1')",
+      "PowerShell($cmd = '\"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\VC\\\\Auxiliary\\\\Build\\\\vcvars64.bat\" >NUL 2>&1 && cmake --build \"out\\\\build\\\\x64-Debug\" --target AuroraEngine'; & cmd /c $cmd 2>&1 | Select-Object -Last 60)",
+      "PowerShell(Remove-Item *)"
+    ]
+  }
+}
