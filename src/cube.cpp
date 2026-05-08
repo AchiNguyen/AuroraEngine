@@ -7,50 +7,58 @@ namespace aurora {
 
 namespace {
 
-// Per-face primary colors so each face is visually distinct.
-constexpr glm::vec3 kColorPosX{1.0f, 0.0f, 0.0f}; // right   = red
-constexpr glm::vec3 kColorNegX{0.0f, 1.0f, 1.0f}; // left    = cyan
-constexpr glm::vec3 kColorPosY{0.0f, 1.0f, 0.0f}; // top     = green
-constexpr glm::vec3 kColorNegY{1.0f, 0.0f, 1.0f}; // bottom  = magenta
-constexpr glm::vec3 kColorPosZ{0.0f, 0.0f, 1.0f}; // front   = blue
-constexpr glm::vec3 kColorNegZ{1.0f, 1.0f, 0.0f}; // back    = yellow
+// Per-face primary colors (kept for layout/attribute consistency, ignored by the
+// textured shader; useful for non-textured debug shaders).
+constexpr glm::vec3 kColorPosX{1.0f, 0.0f, 0.0f};
+constexpr glm::vec3 kColorNegX{0.0f, 1.0f, 1.0f};
+constexpr glm::vec3 kColorPosY{0.0f, 1.0f, 0.0f};
+constexpr glm::vec3 kColorNegY{1.0f, 0.0f, 1.0f};
+constexpr glm::vec3 kColorPosZ{0.0f, 0.0f, 1.0f};
+constexpr glm::vec3 kColorNegZ{1.0f, 1.0f, 0.0f};
+
+// Each face's 4 corners get the unit square (0,0)(1,0)(1,1)(0,1) so the full
+// image is mapped per face.
+constexpr glm::vec2 kUv00{0.0f, 0.0f};
+constexpr glm::vec2 kUv10{1.0f, 0.0f};
+constexpr glm::vec2 kUv11{1.0f, 1.0f};
+constexpr glm::vec2 kUv01{0.0f, 1.0f};
 
 constexpr std::array<Vertex, 24> kVertices{{
-    // +Z front face (normal +Z, blue)
-    {{-0.5f, -0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}},
-    {{ 0.5f, -0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}},
-    {{ 0.5f,  0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}},
-    {{-0.5f,  0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}},
+    // +Z front face (normal +Z)
+    {{-0.5f, -0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}, kUv00},
+    {{ 0.5f, -0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}, kUv10},
+    {{ 0.5f,  0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}, kUv11},
+    {{-0.5f,  0.5f,  0.5f}, kColorPosZ, { 0.0f,  0.0f,  1.0f}, kUv01},
 
-    // -Z back face (normal -Z, yellow)
-    {{ 0.5f, -0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}},
-    {{-0.5f, -0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}},
-    {{-0.5f,  0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}},
-    {{ 0.5f,  0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}},
+    // -Z back face (normal -Z)
+    {{ 0.5f, -0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}, kUv00},
+    {{-0.5f, -0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}, kUv10},
+    {{-0.5f,  0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}, kUv11},
+    {{ 0.5f,  0.5f, -0.5f}, kColorNegZ, { 0.0f,  0.0f, -1.0f}, kUv01},
 
-    // +X right face (normal +X, red)
-    {{ 0.5f, -0.5f,  0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}},
-    {{ 0.5f, -0.5f, -0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}},
-    {{ 0.5f,  0.5f, -0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}},
-    {{ 0.5f,  0.5f,  0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}},
+    // +X right face (normal +X)
+    {{ 0.5f, -0.5f,  0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}, kUv00},
+    {{ 0.5f, -0.5f, -0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}, kUv10},
+    {{ 0.5f,  0.5f, -0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}, kUv11},
+    {{ 0.5f,  0.5f,  0.5f}, kColorPosX, { 1.0f,  0.0f,  0.0f}, kUv01},
 
-    // -X left face (normal -X, cyan)
-    {{-0.5f, -0.5f, -0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}},
-    {{-0.5f, -0.5f,  0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}},
-    {{-0.5f,  0.5f,  0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}},
-    {{-0.5f,  0.5f, -0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}},
+    // -X left face (normal -X)
+    {{-0.5f, -0.5f, -0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}, kUv00},
+    {{-0.5f, -0.5f,  0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}, kUv10},
+    {{-0.5f,  0.5f,  0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}, kUv11},
+    {{-0.5f,  0.5f, -0.5f}, kColorNegX, {-1.0f,  0.0f,  0.0f}, kUv01},
 
-    // +Y top face (normal +Y, green)
-    {{-0.5f,  0.5f,  0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}},
-    {{ 0.5f,  0.5f,  0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}},
-    {{ 0.5f,  0.5f, -0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}},
-    {{-0.5f,  0.5f, -0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}},
+    // +Y top face (normal +Y)
+    {{-0.5f,  0.5f,  0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}, kUv00},
+    {{ 0.5f,  0.5f,  0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}, kUv10},
+    {{ 0.5f,  0.5f, -0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}, kUv11},
+    {{-0.5f,  0.5f, -0.5f}, kColorPosY, { 0.0f,  1.0f,  0.0f}, kUv01},
 
-    // -Y bottom face (normal -Y, magenta)
-    {{-0.5f, -0.5f, -0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}},
-    {{ 0.5f, -0.5f, -0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}},
-    {{ 0.5f, -0.5f,  0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}},
-    {{-0.5f, -0.5f,  0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}},
+    // -Y bottom face (normal -Y)
+    {{-0.5f, -0.5f, -0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}, kUv00},
+    {{ 0.5f, -0.5f, -0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}, kUv10},
+    {{ 0.5f, -0.5f,  0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}, kUv11},
+    {{-0.5f, -0.5f,  0.5f}, kColorNegY, { 0.0f, -1.0f,  0.0f}, kUv01},
 }};
 
 constexpr std::array<std::uint32_t, 36> kIndices{{

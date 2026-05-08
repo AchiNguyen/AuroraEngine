@@ -4,6 +4,7 @@
 #include "aurora/material.hpp"
 #include "aurora/mesh.hpp"
 #include "aurora/shader.hpp"
+#include "aurora/texture.hpp"
 #include "aurora/window.hpp"
 
 #include <GLFW/glfw3.h>
@@ -15,6 +16,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <exception>
+#include <memory>
 
 namespace {
 
@@ -37,7 +39,7 @@ int main() {
         aurora::GlfwContext glfw;
 
         aurora::WindowSpec spec;
-        spec.title = "Aurora \xE2\x80\x94 Stage 4";
+        spec.title = "Aurora \xE2\x80\x94 Stage 5";
         aurora::Window window(spec);
 
         glEnable(GL_DEPTH_TEST);
@@ -62,9 +64,13 @@ int main() {
             glm::vec3(0.4f, 0.6f, 1.0f),
             1.5f,
         };
-        const aurora::Material material = aurora::Material::brass;
+        auto diffuse_map  = std::make_shared<aurora::Texture>(
+            "assets/textures/container2.png", aurora::TextureType::Diffuse);
+        auto specular_map = std::make_shared<aurora::Texture>(
+            "assets/textures/container2_specular.png", aurora::TextureType::Specular);
+        const aurora::Material crate{ diffuse_map, specular_map, 64.0f };
 
-        spdlog::info("Aurora started \xE2\x80\x94 entering Stage 4 render loop");
+        spdlog::info("Aurora started \xE2\x80\x94 entering Stage 5 render loop");
         spdlog::info("Controls: WASD move, Space/LCtrl up-down, mouse look, TAB release cursor, ESC quit");
 
         double last_time     = glfwGetTime();
@@ -121,7 +127,7 @@ int main() {
             shader.set_uniform("u_view",          view);
             shader.set_uniform("u_projection",    projection);
             shader.set_uniform("u_view_position", camera.position());
-            aurora::upload(shader, "u_material",    material);
+            aurora::upload(shader, "u_material",    crate);
             aurora::upload(shader, "u_dir_light",   dir_light);
             aurora::upload(shader, "u_point_light", point_light);
             cube.draw();

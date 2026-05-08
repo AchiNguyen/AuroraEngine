@@ -39,11 +39,14 @@ add_executable(AuroraEngine
     src/camera.cpp
     src/light.cpp
     src/material.cpp
+    src/texture.cpp
+    src/stb_image_impl.cpp
 )
 
 target_include_directories(AuroraEngine
     PRIVATE
         ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/vendor
 )
 
 target_link_libraries(AuroraEngine
@@ -72,4 +75,11 @@ add_custom_command(TARGET AuroraEngine POST_BUILD
         ${CMAKE_SOURCE_DIR}/shaders
         $<TARGET_FILE_DIR:AuroraEngine>/shaders
     COMMENT "Mirroring shaders/ next to AuroraEngine.exe"
+)
+
+add_custom_command(TARGET AuroraEngine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets
+        $<TARGET_FILE_DIR:AuroraEngine>/assets
+    COMMENT "Mirroring assets/ next to AuroraEngine.exe"
 )

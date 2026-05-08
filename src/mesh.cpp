@@ -39,6 +39,10 @@ Mesh::Mesh(std::span<const Vertex> vertices, std::span<const std::uint32_t> indi
     glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                           reinterpret_cast<const void*>(offsetof(Vertex, normal)));
 
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                          reinterpret_cast<const void*>(offsetof(Vertex, uv)));
+
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);

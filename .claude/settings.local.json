@@ -9,7 +9,9 @@
       "PowerShell(Rename-Item *)",
       "Bash(cmd.exe /c '\"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\VC\\\\Auxiliary\\\\Build\\\\vcvars64.bat\" >NUL && cmake --build \"out\\\\build\\\\x64-Debug\" --target AuroraEngine 2>&1')",
       "PowerShell($cmd = '\"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\VC\\\\Auxiliary\\\\Build\\\\vcvars64.bat\" >NUL 2>&1 && cmake --build \"out\\\\build\\\\x64-Debug\" --target AuroraEngine'; & cmd /c $cmd 2>&1 | Select-Object -Last 60)",
-      "PowerShell(Remove-Item *)"
+      "PowerShell(Remove-Item *)",
+      "PowerShell(New-Item *)",
+      "PowerShell($cmd = '\"C:\\\\Program Files\\\\Microsoft Visual Studio\\\\2022\\\\Community\\\\VC\\\\Auxiliary\\\\Build\\\\vcvars64.bat\" >NUL 2>&1 && cmake --build \"out\\\\build\\\\x64-Debug\" --target AuroraEngine'; & cmd /c $cmd 2>&1 | Select-Object -Last 80)"
     ]
   }
 }

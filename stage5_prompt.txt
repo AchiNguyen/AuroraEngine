@@ -1,0 +1,182 @@
+Stage 5: Textured materials. Replace the solid-color cube material with diffuse + specular maps loaded from image files. Build on Stage 4's Phong lighting.
+
+CONSTRAINTS:
+- Keep existing Camera, Mesh, Shader, Window, Light, Material classes; modify them only as needed.
+- Update window title to "Aurora — Stage 5".
+- The cube's per-face vertex colors are no longer used for shading — texture sampling replaces them. (Keep the color attribute in Vertex if other code references it; just stop using it in the fragment shader.)
+
+NEW DEPENDENCY:
+
+- stb_image.h — single-header library, place at vendor/stb/stb_image.h.
+  Download from https://raw.githubusercontent.com/nothings/stb/master/stb_image.h
+  (If a network download from CMake is awkward, instruct me to download it manually before configuring.)
+- One .cpp file in the project (e.g., src/stb_image_impl.cpp) that contains:
+      #define STB_IMAGE_IMPLEMENTATION
+      #include "stb/stb_image.h"
+  to provide the stb_image symbols. This is the standard stb pattern.
+
+NEW FILES:
+
+1. include/aurora/texture.hpp + src/texture.cpp — Texture class:
+   - enum class TextureType { Diffuse, Specular, Normal };  // (Normal listed for future; not implemented yet)
+   - Constructor takes a filesystem path and TextureType.
+   - Loads image with stbi_load (force 4 channels with desired_channels=4 for consistent RGBA upload).
+   - Generates GL texture, glTexImage2D with GL_RGBA8 internal format, GL_RGBA + GL_UNSIGNED_BYTE source format.
+   - Sets sensible default parameters: GL_REPEAT on S/T, GL_LINEAR_MIPMAP_LINEAR for min filter, GL_LINEAR for mag filter.
+   - Calls glGenerateMipmap(GL_TEXTURE_2D).
+   - Calls stbi_image_free after upload.
+   - Logs success or failure via spdlog.
+   - bind(unsigned int unit) — calls glActiveTexture(GL_TEXTURE0 + unit) then glBindTexture.
+   - id() and type() accessors.
+   - RAII destructor: glDeleteTextures. Movable, not copyable.
+
+   Important detail: call stbi_set_flip_vertically_on_load(true) once at process start, OR before each load — image origin convention differs between stb (top-left) and OpenGL (bottom-left).
+
+UPDATED MESH:
+
+- Add a 4th vertex attribute: vec2 uv. Update Vertex struct: position, color, normal, uv.
+- Update vertex layout in mesh.cpp: location 3 = uv.
+- Update make_cube() in cube.cpp: each face's 4 vertices get UVs (0,0), (1,0), (1,1), (0,1) for full image mapped per face.
+
+UPDATED MATERIAL:
+
+- Material no longer holds vec3 ambient/diffuse/specular as primary fields.
+- Replace with:
+      struct Material {
+          std::shared_ptr<Texture> diffuse_map;
+          std::shared_ptr<Texture> specular_map;
+          float shininess = 32.0f;
+      };
+- upload(Shader&, name, Material) becomes:
+      diffuse_map->bind(0);  shader.set_uniform(name + ".diffuse",  0);
+      specular_map->bind(1); shader.set_uniform(name + ".specular", 1);
+      shader.set_uniform(name + ".shininess", material.shininess);
+
+UPDATED SHADERS:
+
+shaders/mesh.vert — add UV passthrough:
+   #version 460 core
+   layout(location=0) in vec3 a_position;
+   layout(location=1) in vec3 a_color;     // unused but kept for layout consistency
+   layout(location=2) in vec3 a_normal;
+   layout(location=3) in vec2 a_uv;
+
+   out vec3 v_world_position;
+   out vec3 v_world_normal;
+   out vec2 v_uv;
+
+   uniform mat4 u_model;
+   uniform mat4 u_view;
+   uniform mat4 u_projection;
+
+   void main() {
+       vec4 world_pos = u_model * vec4(a_position, 1.0);
+       v_world_position = world_pos.xyz;
+       v_world_normal = mat3(transpose(inverse(u_model))) * a_normal;
+       v_uv = a_uv;
+       gl_Position = u_projection * u_view * world_pos;
+   }
+
+shaders/mesh.frag — sample textures for material colors:
+   #version 460 core
+   in vec3 v_world_position;
+   in vec3 v_world_normal;
+   in vec2 v_uv;
+   out vec4 frag_color;
+
+   struct Material {
+       sampler2D diffuse;
+       sampler2D specular;
+       float shininess;
+   };
+   struct DirectionalLight {
+       vec3 direction;
+       vec3 color;
+       float intensity;
+   };
+   struct PointLight {
+       vec3 position;
+       vec3 color;
+       float intensity;
+       float constant;
+       float linear;
+       float quadratic;
+   };
+
+   uniform Material u_material;
+   uniform DirectionalLight u_dir_light;
+   uniform PointLight u_point_light;
+   uniform vec3 u_view_position;
+
+   vec3 phong_directional(DirectionalLight light, vec3 normal, vec3 view_dir,
+                          vec3 albedo, vec3 specular_color) {
+       vec3 light_dir = normalize(-light.direction);
+       float diff = max(dot(normal, light_dir), 0.0);
+       vec3 reflect_dir = reflect(-light_dir, normal);
+       float spec = pow(max(dot(view_dir, reflect_dir), 0.0), u_material.shininess);
+       vec3 ambient  = light.color * albedo * 0.1;
+       vec3 diffuse  = light.color * diff * albedo;
+       vec3 specular = light.color * spec * specular_color;
+       return (ambient + diffuse + specular) * light.intensity;
+   }
+
+   vec3 phong_point(PointLight light, vec3 normal, vec3 frag_pos, vec3 view_dir,
+                    vec3 albedo, vec3 specular_color) {
+       vec3 light_dir = normalize(light.position - frag_pos);
+       float diff = max(dot(normal, light_dir), 0.0);
+       vec3 reflect_dir = reflect(-light_dir, normal);
+       float spec = pow(max(dot(view_dir, reflect_dir), 0.0), u_material.shininess);
+       float distance = length(light.position - frag_pos);
+       float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * distance * distance);
+       vec3 ambient  = light.color * albedo * 0.1;
+       vec3 diffuse  = light.color * diff * albedo;
+       vec3 specular = light.color * spec * specular_color;
+       return (ambient + diffuse + specular) * light.intensity * attenuation;
+   }
+
+   void main() {
+       vec3 albedo         = texture(u_material.diffuse,  v_uv).rgb;
+       vec3 specular_color = texture(u_material.specular, v_uv).rgb;
+       vec3 normal   = normalize(v_world_normal);
+       vec3 view_dir = normalize(u_view_position - v_world_position);
+
+       vec3 result = phong_directional(u_dir_light,   normal,                view_dir, albedo, specular_color)
+                   + phong_point(      u_point_light, normal, v_world_position, view_dir, albedo, specular_color);
+
+       frag_color = vec4(result, 1.0);
+   }
+
+ASSETS:
+
+- Create assets/textures/container2.png (the diffuse map) and assets/textures/container2_specular.png (the specular map).
+- These are well-known free textures from learnopengl.com:
+      https://learnopengl.com/img/textures/container2.png
+      https://learnopengl.com/img/textures/container2_specular.png
+- If you can fetch them via CMake, do so. Otherwise instruct me to download them manually with curl/Invoke-WebRequest into assets/textures/.
+
+CMAKE:
+
+- Add src/texture.cpp, src/stb_image_impl.cpp to add_executable.
+- Add include path: target_include_directories(AuroraEngine PRIVATE ${CMAKE_SOURCE_DIR}/vendor)
+  (so #include "stb/stb_image.h" works.)
+- Copy assets/textures/ to runtime output directory (alongside the existing shader copy).
+
+MAIN.CPP:
+
+- Build the cube material:
+      auto diffuse  = std::make_shared<Texture>("assets/textures/container2.png", TextureType::Diffuse);
+      auto specular = std::make_shared<Texture>("assets/textures/container2_specular.png", TextureType::Specular);
+      Material crate{ diffuse, specular, 64.0f };
+- In the render loop, upload the material with the new helper.
+- Keep everything else from Stage 4 (directional + point light, orbiting lamp).
+
+DELIVERABLES:
+
+- vendor/stb/stb_image.h
+- src/stb_image_impl.cpp
+- include/aurora/texture.hpp + src/texture.cpp
+- assets/textures/container2.png + container2_specular.png
+- Updated: mesh.hpp, cube.cpp, material.hpp/cpp, mesh.vert/frag, main.cpp, CMakeLists.txt
+- Lamp shader/render path unchanged
+
+End with the build steps to run from PowerShell. Expected result: a wooden crate (with darker bands of metal-edge-trim showing brighter specular highlights) rotating in the scene, lit by the warm directional sun and the orbiting blue lamp. The metal trim should noticeably "shine" more than the wood when the lamp passes over.
