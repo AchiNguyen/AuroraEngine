@@ -1,0 +1,84 @@
+Stage 6: Load real 3D models from .obj/.gltf files via Assimp. Replace the cube with a loaded model, with auto-discovered diffuse and specular textures.
+
+CONSTRAINTS:
+- Build on Stage 5. Keep Texture, Shader, Camera, Light, Material classes; modify minimally.
+- Update window title to "Aurora — Stage 6".
+- Keep the existing cube/lamp code paths in the project (we may want them as fallbacks), but main.cpp's primary subject is the loaded model.
+
+NEW DEPENDENCY:
+
+- assimp via vcpkg. Add "assimp" to vcpkg.json dependencies array.
+- find_package(assimp CONFIG REQUIRED) in CMakeLists.txt.
+- target_link_libraries: assimp::assimp.
+
+NEW FILES:
+
+1. include/aurora/model.hpp + src/model.cpp — Model class that owns N Meshes:
+   - Constructor takes a filesystem path to a model file.
+   - Uses Assimp::Importer to load the scene with these post-process flags:
+       aiProcess_Triangulate
+       aiProcess_GenSmoothNormals
+       aiProcess_FlipUVs            // OpenGL convention
+       aiProcess_CalcTangentSpace   // for future normal mapping
+       aiProcess_OptimizeMeshes
+   - On load failure, logs spdlog::error with importer.GetErrorString() and throws std::runtime_error.
+   - Recursively walks the scene's node tree, processing each aiMesh into our own Mesh.
+   - For each aiMesh:
+       - Pulls vertices: position, normal, uv (uv from texCoords[0], or vec2(0) if absent), color (default white).
+       - Pulls indices from aiFace.
+       - Pulls associated aiMaterial; loads diffuse + specular textures via TextureCache (see below).
+       - Constructs a struct holding (Mesh, Material) — call it MeshEntry.
+   - Stores the directory of the original file (for resolving relative texture paths in the model).
+   - draw(Shader& shader) iterates all MeshEntries: upload material, mesh.draw().
+   - RAII cleanup is automatic (Mesh + Texture handle their own GL resources).
+
+2. include/aurora/texture_cache.hpp + src/texture_cache.cpp — avoids loading the same texture twice:
+   - Static method get(const std::string& path, TextureType type) → std::shared_ptr<Texture>.
+   - Internal map<string, weak_ptr<Texture>>.
+   - If path is loaded and live, return existing shared_ptr.
+   - Otherwise create new Texture, store weak ref, return.
+   - This is important: many model meshes share the same texture, and loading 1024x1024 PNGs many times is wasteful.
+
+3. Update Material to handle missing textures gracefully:
+   - If diffuse_map is null, use a 1x1 white fallback texture.
+   - If specular_map is null, use a 1x1 black fallback (no specular).
+   - Add static white_fallback() and black_fallback() helpers in Texture or Material that lazy-init.
+
+UPDATED MAIN.CPP:
+
+- After GL init, load the model:
+      Model model{ "assets/models/backpack/backpack.obj" };  // example path
+- In the render loop, instead of cube.draw():
+      shader.bind();
+      // upload all the existing uniforms (matrices, lights, view position, dt, etc.)
+      model.draw(shader);
+- Camera initial position should be {0, 0, 5} or further back so the model fits in view; adjust based on model scale.
+- Keep the orbiting blue lamp drawing (still useful as a moving light visualization).
+
+ASSETS:
+
+- Place a sample model in assets/models/.
+- Suggested model: the "Backpack" model from learnopengl.com — it's the standard demo model used across the OpenGL world for this stage. Multiple textures, manageable poly count.
+  Source: https://learnopengl.com/data/models/backpack.zip
+  License: free for educational use.
+- Instruct me to download manually if a CMake fetch is awkward; I'll run the PowerShell commands.
+
+CMAKE:
+
+- Add src/model.cpp, src/texture_cache.cpp to add_executable.
+- Add assimp::assimp to target_link_libraries.
+- Ensure assets/models/ gets copied to runtime output dir alongside textures and shaders.
+
+ERROR HANDLING:
+
+- Model load failure should be loud (spdlog::error with full Assimp error string, then std::runtime_error).
+- Missing textures should be warning-level, not fatal — fall back to white/black 1x1 textures.
+- Log a summary on successful load: number of meshes, total vertices, total triangles, texture count.
+
+DELIVERABLES:
+
+- New: include/aurora/model.hpp, src/model.cpp, include/aurora/texture_cache.hpp, src/texture_cache.cpp.
+- Updated: vcpkg.json (add assimp), CMakeLists.txt, main.cpp, possibly texture.hpp/cpp (fallbacks), material.hpp/cpp (handle null maps).
+- New asset directory: assets/models/backpack/ with .obj, .mtl, and texture files.
+
+End with the build steps. Expected result: a real 3D model (the backpack) rendered in the scene, properly textured with diffuse and specular maps, lit by the sun + orbiting lamp from Stage 5. Spdlog should report mesh count and triangle count on startup.

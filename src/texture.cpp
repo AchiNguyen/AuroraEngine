@@ -20,6 +20,13 @@ const char* type_name(TextureType type) {
     return "unknown";
 }
 
+void apply_default_params() {
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+}
+
 }
 
 Texture::Texture(const std::filesystem::path& path, TextureType type)
@@ -42,17 +49,27 @@ Texture::Texture(const std::filesystem::path& path, TextureType type)
                  width, height, 0,
                  GL_RGBA, GL_UNSIGNED_BYTE, data);
     glGenerateMipmap(GL_TEXTURE_2D);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    apply_default_params();
 
     glBindTexture(GL_TEXTURE_2D, 0);
     stbi_image_free(data);
 
     spdlog::debug("Texture loaded [{}] '{}' {}x{} src_channels={} id={}",
                   type_name(type), path_str, width, height, channels, id_);
+}
+
+Texture::Texture(int width, int height, const unsigned char* rgba_pixels, TextureType type)
+    : type_(type) {
+    glGenTextures(1, &id_);
+    glBindTexture(GL_TEXTURE_2D, id_);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8,
+                 width, height, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, rgba_pixels);
+    glGenerateMipmap(GL_TEXTURE_2D);
+    apply_default_params();
+
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 Texture::~Texture() {
@@ -82,6 +99,26 @@ void Texture::release() noexcept {
 void Texture::bind(unsigned int unit) const {
     glActiveTexture(GL_TEXTURE0 + unit);
     glBindTexture(GL_TEXTURE_2D, id_);
+}
+
+std::shared_ptr<Texture> Texture::white_fallback() {
+    static std::weak_ptr<Texture> cached;
+    if (auto p = cached.lock()) return p;
+    constexpr unsigned char kWhite[4] = {0xFF, 0xFF, 0xFF, 0xFF};
+    auto p = std::shared_ptr<Texture>(new Texture(1, 1, kWhite, TextureType::Diffuse));
+    cached = p;
+    spdlog::debug("Texture: created 1x1 white fallback id={}", p->id());
+    return p;
+}
+
+std::shared_ptr<Texture> Texture::black_fallback() {
+    static std::weak_ptr<Texture> cached;
+    if (auto p = cached.lock()) return p;
+    constexpr unsigned char kBlack[4] = {0x00, 0x00, 0x00, 0xFF};
+    auto p = std::shared_ptr<Texture>(new Texture(1, 1, kBlack, TextureType::Specular));
+    cached = p;
+    spdlog::debug("Texture: created 1x1 black fallback id={}", p->id());
+    return p;
 }
 
 }

@@ -1,10 +1,11 @@
 #include "aurora/camera.hpp"
 #include "aurora/cube.hpp"
+#include "aurora/debug_ui.hpp"
 #include "aurora/light.hpp"
-#include "aurora/material.hpp"
 #include "aurora/mesh.hpp"
+#include "aurora/model.hpp"
+#include "aurora/scene_state.hpp"
 #include "aurora/shader.hpp"
-#include "aurora/texture.hpp"
 #include "aurora/window.hpp"
 
 #include <GLFW/glfw3.h>
@@ -16,16 +17,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <exception>
-#include <memory>
-
-namespace {
-
-constexpr float kClearR = 0x0a / 255.0f;
-constexpr float kClearG = 0x0e / 255.0f;
-constexpr float kClearB = 0x27 / 255.0f;
-constexpr float kClearA = 1.0f;
-
-}
 
 int main() {
 #ifdef AURORA_DEBUG
@@ -39,7 +30,7 @@ int main() {
         aurora::GlfwContext glfw;
 
         aurora::WindowSpec spec;
-        spec.title = "Aurora \xE2\x80\x94 Stage 5";
+        spec.title = "Aurora \xE2\x80\x94 Stage 7";
         aurora::Window window(spec);
 
         glEnable(GL_DEPTH_TEST);
@@ -48,11 +39,12 @@ int main() {
         const float initial_aspect =
             static_cast<float>(fb0.x) / static_cast<float>(fb0.y > 0 ? fb0.y : 1);
 
-        aurora::Camera camera(glm::vec3{0.0f, 0.0f, 3.0f}, initial_aspect);
-        aurora::Mesh   cube = aurora::make_cube();
+        aurora::Camera camera(glm::vec3{0.0f, 0.0f, 5.0f}, initial_aspect);
         aurora::Mesh   lamp = aurora::make_cube();
         aurora::Shader shader     ("shaders/mesh.vert", "shaders/mesh.frag");
         aurora::Shader lamp_shader("shaders/lamp.vert", "shaders/lamp.frag");
+
+        aurora::Model model("assets/models/backpack/backpack.obj");
 
         aurora::DirectionalLight dir_light{
             glm::vec3(-0.2f, -1.0f, -0.3f),
@@ -64,14 +56,37 @@ int main() {
             glm::vec3(0.4f, 0.6f, 1.0f),
             1.5f,
         };
-        auto diffuse_map  = std::make_shared<aurora::Texture>(
-            "assets/textures/container2.png", aurora::TextureType::Diffuse);
-        auto specular_map = std::make_shared<aurora::Texture>(
-            "assets/textures/container2_specular.png", aurora::TextureType::Specular);
-        const aurora::Material crate{ diffuse_map, specular_map, 64.0f };
 
-        spdlog::info("Aurora started \xE2\x80\x94 entering Stage 5 render loop");
+        bool      dir_light_enabled    = true;
+        bool      point_orbit_enabled  = true;
+        float     point_orbit_radius   = 3.0f;
+        bool      model_rotate_enabled = true;
+        float     model_rotation_speed = 20.0f;
+        glm::vec3 model_rotation_axis  {0.0f, 1.0f, 0.0f};
+        glm::vec3 clear_color {0x0a / 255.0f, 0x0e / 255.0f, 0x27 / 255.0f};
+
+        aurora::SceneState scene_state{
+            dir_light,
+            point_light,
+            model.primary_material(),
+            camera,
+            model_rotation_speed,
+            model_rotate_enabled,
+            model_rotation_axis,
+            clear_color,
+            dir_light_enabled,
+            point_orbit_enabled,
+            point_orbit_radius,
+        };
+
+        aurora::DebugUI debug_ui(window.handle());
+
+        spdlog::info("Aurora started \xE2\x80\x94 entering Stage 7 render loop");
         spdlog::info("Controls: WASD move, Space/LCtrl up-down, mouse look, TAB release cursor, ESC quit");
+
+        constexpr float kOrbitHeight = 1.5f;
+        float orbit_phase = 0.0f;
+        float model_angle_deg = 0.0f;
 
         double last_time     = glfwGetTime();
         double last_log_time = last_time;
@@ -83,16 +98,24 @@ int main() {
             const float  dt  = static_cast<float>(now - last_time);
             last_time = now;
 
+            debug_ui.record_frame(dt);
+            debug_ui.begin_frame();
+
+            const bool ui_kb    = debug_ui.want_capture_keyboard();
+            const bool ui_mouse = debug_ui.want_capture_mouse();
+
             using Dir = aurora::Camera::Direction;
-            if (window.is_key_pressed(GLFW_KEY_W))            camera.process_keyboard(Dir::Forward,  dt);
-            if (window.is_key_pressed(GLFW_KEY_S))            camera.process_keyboard(Dir::Backward, dt);
-            if (window.is_key_pressed(GLFW_KEY_A))            camera.process_keyboard(Dir::Left,     dt);
-            if (window.is_key_pressed(GLFW_KEY_D))            camera.process_keyboard(Dir::Right,    dt);
-            if (window.is_key_pressed(GLFW_KEY_SPACE))        camera.process_keyboard(Dir::Up,       dt);
-            if (window.is_key_pressed(GLFW_KEY_LEFT_CONTROL)) camera.process_keyboard(Dir::Down,     dt);
+            if (!ui_kb) {
+                if (window.is_key_pressed(GLFW_KEY_W))            camera.process_keyboard(Dir::Forward,  dt);
+                if (window.is_key_pressed(GLFW_KEY_S))            camera.process_keyboard(Dir::Backward, dt);
+                if (window.is_key_pressed(GLFW_KEY_A))            camera.process_keyboard(Dir::Left,     dt);
+                if (window.is_key_pressed(GLFW_KEY_D))            camera.process_keyboard(Dir::Right,    dt);
+                if (window.is_key_pressed(GLFW_KEY_SPACE))        camera.process_keyboard(Dir::Up,       dt);
+                if (window.is_key_pressed(GLFW_KEY_LEFT_CONTROL)) camera.process_keyboard(Dir::Down,     dt);
+            }
 
             const glm::vec2 mdelta = window.consume_mouse_delta();
-            if (window.cursor_captured()) {
+            if (window.cursor_captured() && !ui_mouse) {
                 camera.process_mouse(mdelta.x, mdelta.y);
             }
 
@@ -100,39 +123,45 @@ int main() {
             const float aspect =
                 static_cast<float>(fb.x) / static_cast<float>(fb.y > 0 ? fb.y : 1);
 
-            const float t = static_cast<float>(now);
+            if (point_orbit_enabled) {
+                orbit_phase += dt;
+                point_light.position = glm::vec3(
+                    std::cos(orbit_phase) * point_orbit_radius,
+                    kOrbitHeight,
+                    std::sin(orbit_phase) * point_orbit_radius
+                );
+            }
 
-            // Orbit the point light in a horizontal circle around the cube.
-            constexpr float kOrbitRadius = 3.0f;
-            constexpr float kOrbitHeight = 1.5f;
-            point_light.position = glm::vec3(
-                std::cos(t) * kOrbitRadius,
-                kOrbitHeight,
-                std::sin(t) * kOrbitRadius
-            );
+            if (model_rotate_enabled) {
+                model_angle_deg += model_rotation_speed * dt;
+            }
+            const float axis_len = glm::length(model_rotation_axis);
+            const glm::vec3 axis = (axis_len > 1e-5f)
+                ? model_rotation_axis / axis_len
+                : glm::vec3(0.0f, 1.0f, 0.0f);
 
-            const glm::mat4 model =
+            const glm::mat4 model_mat =
                 glm::rotate(glm::mat4(1.0f),
-                            t * glm::radians(45.0f),
-                            glm::vec3(0.5f, 1.0f, 0.0f));
+                            glm::radians(model_angle_deg),
+                            axis);
             const glm::mat4 view       = camera.view_matrix();
             const glm::mat4 projection = camera.projection_matrix(aspect);
 
-            glClearColor(kClearR, kClearG, kClearB, kClearA);
+            glClearColor(clear_color.r, clear_color.g, clear_color.b, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            // --- Lit cube pass ---
+            aurora::DirectionalLight effective_dir = dir_light;
+            if (!dir_light_enabled) effective_dir.intensity = 0.0f;
+
             shader.bind();
-            shader.set_uniform("u_model",         model);
+            shader.set_uniform("u_model",         model_mat);
             shader.set_uniform("u_view",          view);
             shader.set_uniform("u_projection",    projection);
             shader.set_uniform("u_view_position", camera.position());
-            aurora::upload(shader, "u_material",    crate);
-            aurora::upload(shader, "u_dir_light",   dir_light);
+            aurora::upload(shader, "u_dir_light",   effective_dir);
             aurora::upload(shader, "u_point_light", point_light);
-            cube.draw();
+            model.draw(shader);
 
-            // --- Unlit lamp pass at the point light's position ---
             const glm::mat4 lamp_model =
                 glm::scale(glm::translate(glm::mat4(1.0f), point_light.position),
                            glm::vec3(0.1f));
@@ -150,6 +179,9 @@ int main() {
                               point_light.position.z);
                 last_log_time = now;
             }
+
+            debug_ui.render_panels(scene_state);
+            debug_ui.end_frame();
 
             window.swap_buffers();
         }

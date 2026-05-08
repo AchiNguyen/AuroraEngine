@@ -11,6 +11,11 @@
             "features": ["gl-api-46"]
         },
         "glm",
-        "spdlog"
+        "spdlog",
+        "assimp",
+        {
+            "name": "imgui",
+            "features": ["docking-experimental", "glfw-binding", "opengl3-binding"]
+        }
     ]
 }

@@ -17,7 +17,13 @@ glm::mat4 Camera::view_matrix() const {
 }
 
 glm::mat4 Camera::projection_matrix(float aspect) const {
-    return glm::perspective(glm::radians(70.0f), aspect, 0.1f, 100.0f);
+    return glm::perspective(glm::radians(fov_), aspect, 0.1f, 100.0f);
+}
+
+void Camera::set_yaw_pitch(float yaw, float pitch) {
+    yaw_   = yaw;
+    pitch_ = std::clamp(pitch, -89.0f, 89.0f);
+    update_vectors();
 }
 
 void Camera::process_keyboard(Direction direction, float dt) {

@@ -1,0 +1,82 @@
+Stage 7: Add Dear ImGui dev overlay for live tweaking of lights, materials, camera, and performance metrics. Build on Stage 6.
+
+CONSTRAINTS:
+- Keep all existing functionality. The dev overlay is additive.
+- Update window title to "Aurora — Stage 7".
+- ImGui draws AFTER the scene each frame, BEFORE glfwSwapBuffers.
+
+NEW DEPENDENCY:
+- imgui via vcpkg. Add "imgui" with the features ["docking-experimental", "glfw-binding", "opengl3-binding"] to vcpkg.json.
+  vcpkg JSON syntax for that:
+      { "name": "imgui", "features": ["docking-experimental", "glfw-binding", "opengl3-binding"] }
+- find_package(imgui CONFIG REQUIRED) in CMakeLists.txt.
+- target_link_libraries: imgui::imgui.
+
+NEW FILES:
+
+1. include/aurora/debug_ui.hpp + src/debug_ui.cpp — DebugUI class:
+   - Initializer takes a GLFWwindow*.
+   - On construction:
+       IMGUI_CHECKVERSION();
+       ImGui::CreateContext();
+       ImGui::StyleColorsDark();
+       ImGuiIO& io = ImGui::GetIO();
+       io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+       ImGui_ImplGlfw_InitForOpenGL(window, true);
+       ImGui_ImplOpenGL3_Init("#version 460");
+   - On destruction (RAII):
+       ImGui_ImplOpenGL3_Shutdown();
+       ImGui_ImplGlfw_Shutdown();
+       ImGui::DestroyContext();
+   - begin_frame() — calls ImGui_ImplOpenGL3_NewFrame, ImGui_ImplGlfw_NewFrame, ImGui::NewFrame.
+   - end_frame() — calls ImGui::Render and ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData()).
+   - want_capture_mouse() / want_capture_keyboard() — pass through ImGui::GetIO() flags so main loop can skip camera input when UI has focus.
+   - render_panels(...) — accepts references to scene state structs (see below) and renders the UI for each.
+
+2. include/aurora/scene_state.hpp — a single struct or namespace holding pointers/refs to runtime tweakable state:
+   struct SceneState {
+       DirectionalLight& dir_light;
+       PointLight& point_light;
+       Material& material;       // if applicable
+       Camera& camera;
+       float& model_rotation_speed;
+       bool& model_rotate_enabled;
+       glm::vec3& model_rotation_axis;
+       glm::vec3& clear_color;   // expose the dark blue clear so user can change it
+   };
+   - This is just a bag of references. main.cpp owns the actual values; SceneState is a view into them.
+   - Pass to DebugUI::render_panels() each frame.
+
+DEBUG UI PANELS (each in its own ImGui::Begin/End block, dockable):
+
+1. "Performance" panel:
+   - FPS (1.0 / dt averaged over 60 frames).
+   - Frame time in ms.
+   - Rolling line graph of last 240 frame times via ImGui::PlotLines.
+   - Tick "VSync" checkbox -> calls glfwSwapInterval(0 or 1) accordingly.
+
+2. "Camera" panel:
+   - Read-only display of position (vec3) and yaw/pitch.
+   - Editable: movement_speed (slider 1-50), mouse_sensitivity (slider 0.01-1.0), fov (slider 30-110 degrees).
+   - Reset button: sets camera back to {0, 0, 5} with default yaw/pitch.
+
+3. "Directional Light" panel:
+   - SliderFloat3 for direction (-1 to 1 each), normalized when written back.
+   - ColorEdit3 for color.
+   - SliderFloat for intensity (0 to 5).
+   - Checkbox "enabled" — if false, intensity is multiplied by 0 in shader (or just set to 0).
+
+4. "Point Light" panel:
+   - SliderFloat3 for position (-10 to 10 each).
+   - ColorEdit3 for color.
+   - SliderFloat for intensity (0 to 10).
+   - Checkbox "orbit around origin" — if true, main.cpp animates position; if false, slider drives it.
+   - SliderFloat for orbit radius (0.5 to 8.0) when orbit enabled.
+
+5. "Material" panel (if a top-level material like the backpack's primary material is exposed):
+   - SliderFloat for shininess (1 to 256, log scale).
+   - Note that texture-driven diffuse/specular maps are not editable here (just read from disk).
+
+6. "Scene" panel:
+   - ColorEdit3 for clear color (the background).
+   - Toggl

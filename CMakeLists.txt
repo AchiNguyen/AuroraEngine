@@ -29,6 +29,8 @@ find_package(glfw3 CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
+find_package(assimp CONFIG REQUIRED)
+find_package(imgui CONFIG REQUIRED)
 
 add_executable(AuroraEngine
     src/main.cpp
@@ -40,7 +42,10 @@ add_executable(AuroraEngine
     src/light.cpp
     src/material.cpp
     src/texture.cpp
+    src/texture_cache.cpp
+    src/model.cpp
     src/stb_image_impl.cpp
+    src/debug_ui.cpp
 )
 
 target_include_directories(AuroraEngine
@@ -55,6 +60,8 @@ target_link_libraries(AuroraEngine
         glad::glad
         glm::glm
         spdlog::spdlog
+        assimp::assimp
+        imgui::imgui
 )
 
 target_compile_definitions(AuroraEngine

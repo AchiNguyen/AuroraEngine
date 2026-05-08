@@ -23,6 +23,13 @@ public:
     float yaw() const { return yaw_; }
     float pitch() const { return pitch_; }
 
+    float& movement_speed()    { return movement_speed_; }
+    float& mouse_sensitivity() { return mouse_sensitivity_; }
+    float& fov()               { return fov_; }
+
+    void set_position(const glm::vec3& p) { position_ = p; }
+    void set_yaw_pitch(float yaw, float pitch);
+
 private:
     void update_vectors();
 
@@ -36,6 +43,7 @@ private:
     float pitch_ = 0.0f;
     float movement_speed_ = 5.0f;
     float mouse_sensitivity_ = 0.1f;
+    float fov_ = 70.0f;
     float aspect_ = 16.0f / 9.0f;
 };
 
