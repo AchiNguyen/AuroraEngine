@@ -14,16 +14,6 @@ void glfw_error_callback(int error, const char* description) {
     spdlog::error("GLFW error {}: {}", error, description ? description : "(null)");
 }
 
-void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action, int /*mods*/) {
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-        glfwSetWindowShouldClose(window, GLFW_TRUE);
-    }
-}
-
-void framebuffer_size_callback(GLFWwindow* /*window*/, int width, int height) {
-    glViewport(0, 0, width, height);
-}
-
 void APIENTRY gl_debug_callback(
     GLenum source,
     GLenum type,
@@ -103,11 +93,19 @@ Window::Window(const WindowSpec& spec) : spec_(spec) {
         throw std::runtime_error("Failed to create GLFW window");
     }
 
+    glfwSetWindowUserPointer(window_, this);
+
     glfwMakeContextCurrent(window_);
     glfwSwapInterval(1);
 
-    glfwSetKeyCallback(window_, key_callback);
-    glfwSetFramebufferSizeCallback(window_, framebuffer_size_callback);
+    glfwSetKeyCallback(window_, &Window::s_key_callback);
+    glfwSetFramebufferSizeCallback(window_, &Window::s_framebuffer_size_callback);
+    glfwSetCursorPosCallback(window_, &Window::s_cursor_pos_callback);
+
+    if (glfwRawMouseMotionSupported() == GLFW_TRUE) {
+        glfwSetInputMode(window_, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+    }
+    glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
         throw std::runtime_error("Failed to load OpenGL function pointers via GLAD");
@@ -138,6 +136,7 @@ Window::Window(const WindowSpec& spec) : spec_(spec) {
 
 Window::~Window() {
     if (window_) {
+        glfwSetWindowUserPointer(window_, nullptr);
         glfwDestroyWindow(window_);
         window_ = nullptr;
     }
@@ -147,12 +146,82 @@ bool Window::should_close() const {
     return glfwWindowShouldClose(window_) == GLFW_TRUE;
 }
 
-void Window::poll_events() const {
+void Window::poll_events() {
     glfwPollEvents();
 }
 
 void Window::swap_buffers() const {
     glfwSwapBuffers(window_);
+}
+
+glm::ivec2 Window::framebuffer_size() const {
+    int w = 0, h = 0;
+    glfwGetFramebufferSize(window_, &w, &h);
+    return {w, h};
+}
+
+bool Window::is_key_pressed(int glfw_key) const {
+    return glfwGetKey(window_, glfw_key) == GLFW_PRESS;
+}
+
+glm::vec2 Window::consume_mouse_delta() {
+    const glm::vec2 d{static_cast<float>(mouse_dx_), static_cast<float>(mouse_dy_)};
+    mouse_dx_ = 0.0;
+    mouse_dy_ = 0.0;
+    return d;
+}
+
+void Window::set_cursor_captured(bool captured) {
+    glfwSetInputMode(window_, GLFW_CURSOR,
+                     captured ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+    first_mouse_ = true;
+    mouse_dx_ = 0.0;
+    mouse_dy_ = 0.0;
+    spdlog::debug("Cursor capture: {}", captured ? "ON" : "OFF");
+}
+
+bool Window::cursor_captured() const {
+    return glfwGetInputMode(window_, GLFW_CURSOR) == GLFW_CURSOR_DISABLED;
+}
+
+void Window::on_cursor_pos(double x, double y) {
+    if (first_mouse_) {
+        last_x_ = x;
+        last_y_ = y;
+        first_mouse_ = false;
+        return;
+    }
+    mouse_dx_ += x - last_x_;
+    mouse_dy_ += y - last_y_;
+    last_x_ = x;
+    last_y_ = y;
+}
+
+void Window::on_key(int key, int action) {
+    if (action != GLFW_PRESS) return;
+    if (key == GLFW_KEY_ESCAPE) {
+        glfwSetWindowShouldClose(window_, GLFW_TRUE);
+    } else if (key == GLFW_KEY_TAB) {
+        set_cursor_captured(!cursor_captured());
+    }
+}
+
+void Window::s_key_callback(GLFWwindow* w, int key, int /*scancode*/, int action, int /*mods*/) {
+    if (auto* self = static_cast<Window*>(glfwGetWindowUserPointer(w))) {
+        self->on_key(key, action);
+    } else if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
+        glfwSetWindowShouldClose(w, GLFW_TRUE);
+    }
+}
+
+void Window::s_cursor_pos_callback(GLFWwindow* w, double x, double y) {
+    if (auto* self = static_cast<Window*>(glfwGetWindowUserPointer(w))) {
+        self->on_cursor_pos(x, y);
+    }
+}
+
+void Window::s_framebuffer_size_callback(GLFWwindow* /*w*/, int width, int height) {
+    glViewport(0, 0, width, height);
 }
 
 }

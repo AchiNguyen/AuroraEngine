@@ -1,0 +1,103 @@
+Stage 3A: Transition from 2D triangle to 3D scene with a rotating cube and free-flying camera.
+
+CONSTRAINTS:
+- Keep the existing Shader class as-is.
+- Replace the triangle_renderer with a more general mesh_renderer abstraction.
+- Update window title to "Aurora — Stage 3A".
+
+NEW FILES:
+
+1. include/aurora/camera.hpp + src/camera.cpp — fly-camera:
+   - State: position (vec3), front (vec3), up (vec3), world_up (vec3 = {0,1,0}), yaw (float), pitch (float), movement_speed (float = 5.0), mouse_sensitivity (float = 0.1).
+   - Constructor takes initial position and aspect ratio.
+   - view_matrix() returns glm::lookAt(position, position + front, up).
+   - projection_matrix(float aspect) returns glm::perspective(radians(70°), aspect, 0.1f, 100.0f).
+   - process_keyboard(direction enum, float dt) — moves position based on front/up/right vectors. Use enum class Direction { Forward, Backward, Left, Right, Up, Down }.
+   - process_mouse(float dx, float dy) — updates yaw/pitch, clamps pitch to (-89°, 89°), recomputes front/right/up vectors.
+   - Internal helper update_vectors() recomputes front/right/up from yaw/pitch.
+
+2. include/aurora/mesh.hpp + src/mesh.cpp — generic indexed mesh:
+   - struct Vertex { vec3 position; vec3 color; vec3 normal; }; (normals included now for future lighting; not used yet)
+   - Constructor takes std::span<const Vertex> vertices, std::span<const uint32_t> indices.
+   - Owns VAO, VBO, EBO.
+   - Configures attribute layout: location 0 = position, 1 = color, 2 = normal.
+   - draw() method: bind VAO, glDrawElements(GL_TRIANGLES, index_count, GL_UNSIGNED_INT, 0).
+   - RAII destructor: glDeleteBuffers, glDeleteVertexArrays. Movable, not copyable.
+
+3. include/aurora/cube.hpp + src/cube.cpp — factory function:
+   - Free function Mesh make_cube() that returns a Mesh of a unit cube centered at origin (-0.5 to 0.5 on each axis).
+   - 24 vertices (4 per face — gives flat shading and correct per-face normals).
+   - 36 indices (6 indices per face × 6 faces).
+   - Each face has a distinct color so the cube is visually interesting.
+
+UPDATED SHADERS:
+
+shaders/mesh.vert (replaces or supplements triangle.vert):
+   #version 460 core
+   layout(location=0) in vec3 a_position;
+   layout(location=1) in vec3 a_color;
+   layout(location=2) in vec3 a_normal;
+
+   out vec3 v_color;
+   out vec3 v_normal;
+
+   uniform mat4 u_model;
+   uniform mat4 u_view;
+   uniform mat4 u_projection;
+
+   void main() {
+       gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
+       v_color = a_color;
+       v_normal = mat3(transpose(inverse(u_model))) * a_normal;
+   }
+
+shaders/mesh.frag:
+   #version 460 core
+   in vec3 v_color;
+   in vec3 v_normal;
+   out vec4 frag_color;
+   void main() {
+       // Cheap fake lighting: tint by normal direction so faces look distinct.
+       vec3 light_dir = normalize(vec3(0.5, 1.0, 0.3));
+       float ndotl = max(dot(normalize(v_normal), light_dir), 0.0);
+       float ambient = 0.25;
+       frag_color = vec4(v_color * (ambient + ndotl * 0.75), 1.0);
+   }
+
+SHADER CLASS ADDITION:
+- Add set_uniform overloads to Shader: set_uniform(name, mat4), set_uniform(name, vec3), set_uniform(name, float), set_uniform(name, int).
+- Cache uniform locations in a std::unordered_map<std::string, GLint> to avoid glGetUniformLocation per call.
+
+INPUT HANDLING IN window.hpp/cpp:
+- Window class needs to expose: is_key_pressed(int glfw_key), and provide mouse delta tracking.
+- On startup: glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED) so the mouse is captured for fly-cam.
+- Toggle cursor capture with TAB key (so user can release the mouse to interact with VS).
+
+GL STATE IN MAIN:
+- glEnable(GL_DEPTH_TEST) before render loop.
+- Clear color buffer AND depth buffer each frame: glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT).
+
+MAIN.CPP RENDER LOOP:
+- Replace the triangle code with:
+  - Construct Camera with initial position {0, 0, 3}.
+  - Construct Mesh cube via make_cube().
+  - Construct Shader from mesh.vert/mesh.frag.
+  - Per frame:
+      - Compute dt (delta time) using glfwGetTime().
+      - Read WASD + Space/LCtrl for movement, pass to camera.process_keyboard.
+      - Read mouse delta, pass to camera.process_mouse.
+      - Compute model matrix: glm::rotate(mat4(1), time * radians(45°), vec3(0.5, 1.0, 0.0)) — slow tilt-rotation.
+      - Set u_model, u_view, u_projection uniforms.
+      - shader.bind(); cube.draw();
+- ESC still closes; TAB toggles mouse capture.
+
+CMAKE:
+- Add new sources (camera.cpp, mesh.cpp, cube.cpp).
+- Ensure shaders/ still gets copied to runtime output dir (mesh.vert + mesh.frag now).
+
+DELIVERABLES:
+- New files: camera.hpp/cpp, mesh.hpp/cpp, cube.hpp/cpp, mesh.vert, mesh.frag.
+- Updated: shader.hpp/cpp (uniform setters), window.hpp/cpp (input + mouse capture), main.cpp (full new render loop), CMakeLists.txt (new sources).
+- Optional: keep triangle_renderer.hpp/cpp + triangle.vert/frag in the project but unused, or delete them — your call, just be consistent.
+
+End with the build steps to run from PowerShell. Expected result: a colorful cube rotating slowly in the center of a dark blue scene; WASD moves the camera, mouse rotates the view, TAB releases the mouse, ESC quits.

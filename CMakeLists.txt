@@ -33,6 +33,10 @@ find_package(spdlog CONFIG REQUIRED)
 add_executable(AuroraEngine
     src/main.cpp
     src/window.cpp
+    src/shader.cpp
+    src/mesh.cpp
+    src/cube.cpp
+    src/camera.cpp
 )
 
 target_include_directories(AuroraEngine
@@ -60,3 +64,10 @@ if(MSVC)
         VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     )
 endif()
+
+add_custom_command(TARGET AuroraEngine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/shaders
+        $<TARGET_FILE_DIR:AuroraEngine>/shaders
+    COMMENT "Mirroring shaders/ next to AuroraEngine.exe"
+)
